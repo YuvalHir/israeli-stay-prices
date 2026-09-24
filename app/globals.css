@@ -356,3 +356,7 @@ body { text-rendering: optimizeLegibility; }
 .footer .gh svg { width: 18px; height: 18px; }
 /* Round 7: sticky filter sits on a solid strip so rows never peek through the gap */
 .seg.filter { background: rgba(241,235,226,.96); box-shadow: 0 -12px 0 4px rgba(246,243,238,.96), 0 8px 16px -10px rgba(40,25,10,.18); }
+/* Round 8: long names no longer stretch the "where are you sleeping" list off the sheet */
+.sleep-list { grid-template-columns: minmax(0, 1fr); overflow-x: hidden; padding: 2px; margin: -2px -2px 12px; overscroll-behavior: contain; }
+.sleep-list li { min-width: 0; }
+.seg.filter { background: rgb(241,235,226); }
