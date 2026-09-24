@@ -53,8 +53,30 @@ export async function wikidataImages(qids: string[]): Promise<Record<string, str
   return out;
 }
 
-/** OSM photo tags for specific elements (ids like osm-node-123). */
+import { nominatimLookup } from './placeLookup';
+
+/** OSM photo tags for specific elements: Nominatim lookup first (reliable from Workers), Overpass as fallback. */
 export async function osmPhotoTags(ids: string[]): Promise<Record<string, { wikidata?: string; commons?: string }>> {
+  try {
+    const found = await nominatimLookup(ids);
+    if (Object.keys(found).length) {
+      const out: Record<string, { wikidata?: string; commons?: string }> = {};
+      for (const [id, p] of Object.entries(found)) { const commons = commonsTitle(p.commons); if (commons || p.wikidata) out[id] = { commons: commons ?? undefined, wikidata: p.wikidata }; }
+      return out;
+    }
+  } catch { /* fall back to Overpass */ }
+  return overpassPhotoTags(ids);
+}
+
+/** Resolve one place's own photo (commons tag or Wikidata P18). */
+export async function placePhoto(p: { commons?: string; wikidata?: string }): Promise<Photo | null> {
+  let f = commonsTitle(p.commons);
+  if (!f && p.wikidata) f = (await wikidataImages([p.wikidata]))[p.wikidata] ?? null;
+  if (!f) return null;
+  return (await commonsInfo([f], 1200))[f] ?? null;
+}
+
+async function overpassPhotoTags(ids: string[]): Promise<Record<string, { wikidata?: string; commons?: string }>> {
   const by: Record<string, string[]> = { node: [], way: [], relation: [] };
   for (const id of ids) { const m = id.match(/^osm-(node|way|relation)-(\d+)$/); if (m) by[m[1]].push(m[2]); }
   const parts = Object.entries(by).filter(([, v]) => v.length).map(([t, v]) => `${t}(id:${v.join(',')});`).join('');
