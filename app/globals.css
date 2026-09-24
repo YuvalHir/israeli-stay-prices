@@ -210,3 +210,19 @@ p { line-height: 1.55; }
 .map-icon { width: 60px; height: 60px; display: grid; place-items: center; border-radius: 16px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); transition: transform .12s; }
 .map-icon:active { transform: scale(.94); }
 .map-icon img { width: 44px; height: 44px; border-radius: 10px; object-fit: contain; }
+
+/* Quick report + share */
+.btn.sleep { background: linear-gradient(135deg, #e0633f, #f08a4b); color: #fff; border-color: transparent; box-shadow: 0 6px 18px rgba(224,99,63,.35); }
+.hero .btn.sleep { margin-top: 10px; }
+.area-head + .gate + .btn.sleep, .gate + .btn.sleep { margin: 10px 0 4px; }
+.sleep-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 46vh; overflow: auto; }
+.sleep-opt { width: 100%; display: flex; align-items: center; gap: 12px; text-align: right; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
+.sleep-opt.first { border-color: var(--coral); background: var(--coral-soft); }
+.sleep-kind { width: 42px; height: 42px; border-radius: 12px; background: var(--sand); display: grid; place-items: center; font-size: 22px; flex: none; }
+.sleep-opt .place-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sleep-opt .name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-sheet h2 { margin-bottom: 4px; }
+.share-preview { border-radius: 18px; overflow: hidden; background: var(--sand); aspect-ratio: 4 / 5; max-height: 52vh; margin: 0 auto 6px; display: flex; justify-content: center; }
+.share-preview img { height: 100%; width: auto; max-width: 100%; object-fit: contain; display: block; }
+.share-skel { width: 100%; height: 100%; }
+.btn.wa { background: #25d366; color: #fff; border-color: #25d366; }

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { countryAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, suggestPlaces, type Area, type Place, type Suggestion } from '@/lib/places';
 import { currencyFor, currencyName, flagOf, FLAG_BY_CURRENCY, formatMoney } from '@/lib/currency';
+import { drawShareCard, shareText, type ShareInfo } from '@/lib/shareCard';
 
 const GITHUB_URL = 'https://github.com/YuvalHir/israeli-stay-prices';
 const SLOGAN = 'התמקחת? ספר לחבריך';
@@ -33,7 +34,7 @@ function Thumb({ place, size = 'sm' }: { place: Pick<Place, 'kind'>; size?: 'sm'
   return <div className={`thumb ${size} ph ph-${place.kind}`} aria-hidden="true"><span>{KIND_ICON[place.kind] ?? '🏠'}</span></div>;
 }
 
-function ReportForm({ place, area, country, onDone, onCancel }: { place: Place | null; area: string; country: string | null; onDone: (msg: string) => void; onCancel: () => void }) {
+function ReportForm({ place, area, country, onDone, onCancel }: { place: Place | null; area: string; country: string | null; onDone: (msg: string, share?: ShareInfo) => void; onCancel: () => void }) {
   const local = currencyFor(country);
   const options = Array.from(new Set([local, 'USD', 'ILS']));
   const [name, setName] = useState(place?.name ?? '');
@@ -55,14 +56,14 @@ function ReportForm({ place, area, country, onDone, onCancel }: { place: Place |
       body: JSON.stringify({ placeId: place?.id, placeName: name, placeKind: place?.kind, lat: place?.lat, lon: place?.lon, area, country, price: p, currency, room, nights, stayMonth: month, note }),
     });
     if (!res.ok) { setBusy(false); return setError(res.status === 401 ? 'צריך להתחבר קודם.' : 'השמירה לא הצליחה. נסה שוב.'); }
-    setBusy(false); onDone('תודה! המחיר נשמר, וקיבלת 5 חיפושים עם מחירים.');
+    setBusy(false); onDone('תודה! המחיר נשמר, וקיבלת 5 חיפושים עם מחירים.', { placeName: name.trim(), price: p, currency, country, room, nights, month, lat: place?.lat, lon: place?.lon });
   };
   return <section className="card form">
     <div className="form-head"><button className="icon-btn" onClick={onCancel} aria-label="חזרה">→</button><div><h2>כמה שילמת ללילה?</h2><p className="muted small form-sub">{SLOGAN} 😉</p></div></div>
     {place ? <p className="muted">{KIND_ICON[place.kind] ?? '🏠'} {place.name} · {kindLabel(place.kind)}</p> :
       <label className="field"><span>שם המקום</span><input value={name} onChange={e => setName(e.target.value)} placeholder="למשל Hotel Yog" /></label>}
     <label className="field"><span>מחיר ללילה</span>
-      <div className="price-input"><input inputMode="decimal" value={price} onChange={e => setPrice(e.target.value)} placeholder="0" /><b>{curFlag(currency, country)} {currency}</b></div>
+      <div className="price-input"><input inputMode="decimal" autoFocus={!!place} value={price} onChange={e => setPrice(e.target.value)} placeholder="0" /><b>{curFlag(currency, country)} {currency}</b></div>
     </label>
     <div className="field"><span>מטבע</span>
       <div className="seg">{options.map(c => <button key={c} className={currency === c ? 'on' : ''} onClick={() => setCurrency(c)}>{curFlag(c, country)} {currencyName(c)}</button>)}</div></div>
@@ -81,6 +82,37 @@ function ReportForm({ place, area, country, onDone, onCancel }: { place: Place |
   </section>;
 }
 
+
+function ShareSheet({ info, onClose }: { info: ShareInfo; onClose: () => void }) {
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    let u = '';
+    drawShareCard(info).then(b => { setBlob(b); u = URL.createObjectURL(b); setUrl(u); }).catch(() => {});
+    return () => { if (u) URL.revokeObjectURL(u); };
+  }, [info]);
+  const text = shareText(info);
+  const file = blob ? new File([blob], 'mechir-lalayla.png', { type: 'image/png' }) : null;
+  const canShareFile = !!file && typeof navigator !== 'undefined' && !!navigator.canShare?.({ files: [file] });
+  const share = async () => {
+    if (canShareFile && file) { try { await navigator.share({ files: [file], text }); return; } catch (e: any) { if (e?.name === 'AbortError') return; } }
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  };
+  return <div className="sheet-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="sheet share-sheet" onClick={e => e.stopPropagation()}>
+      <h2>ספר לחבריך 😉</h2>
+      <p>שלח לקבוצת הטיול. ככה עוד חברים יידעו כמה לשלם, ויוסיפו מחירים משלהם.</p>
+      <div className="share-preview">{url ? <img src={url} alt="כרטיס שיתוף עם המחיר ששילמת" /> : <div className="skeleton share-skel" />}</div>
+      <button className="btn wa block big" onClick={share} disabled={!blob}><WhatsAppIcon /> שתף בוואטסאפ</button>
+      {!canShareFile && url && <a className="btn block" href={url} download="mechir-lalayla.png">⬇️ שמור את התמונה</a>}
+      <button className="btn ghost block" onClick={onClose}>אחר כך</button>
+    </div>
+  </div>;
+}
+
+function WhatsAppIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z"/></svg>;
+}
 
 export default function Home() {
   const [me, setMe] = useState<Me | null>(null);
@@ -111,6 +143,9 @@ export default function Home() {
   const [disp, setDisp] = useState<Disp>('local');
   const [sugs, setSugs] = useState<Suggestion[]>([]);
   const [sugOpen, setSugOpen] = useState(false);
+  const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
+  const [loginWhy, setLoginWhy] = useState<'views' | 'report'>('views');
+  const [sleepPick, setSleepPick] = useState<{ status: 'locating' | 'ready' | 'error'; places: Place[]; msg?: string } | null>(null);
 
   useEffect(() => {
     const q = search.trim();
@@ -177,11 +212,13 @@ export default function Home() {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
     const h = (e: Event) => { e.preventDefault(); setInstallEvt(e); };
     window.addEventListener('beforeinstallprompt', h);
+    const at = new URLSearchParams(location.search).get('at')?.split(',').map(Number);
     const lp = new URLSearchParams(location.search).get('login');
     if (lp === 'failed') say('ההתחברות עם Google לא הצליחה. נסה שוב.');
     if (lp) history.replaceState(null, '', '/');
     let seen = false; try { seen = localStorage.getItem('sp_onboarded') === '1'; } catch {}
-    if (!seen) setOnboarding(true); else locate(true);
+    if (at && at.length === 2 && at.every(Number.isFinite)) { history.replaceState(null, '', '/'); if (!seen) { try { localStorage.setItem('sp_onboarded', '1'); } catch {} } loadArea({ name: 'האזור ששותף', lat: at[0], lon: at[1] }); }
+    else if (!seen) setOnboarding(true); else locate(true);
     return () => window.removeEventListener('beforeinstallprompt', h);
   }, []);
   useEffect(() => { if (open || reporting) window.scrollTo({ top: 0 }); }, [open, reporting]);
@@ -197,7 +234,7 @@ export default function Home() {
     setOpen(p);
     setOpenState({ loading: true });
     const res = await fetch('/api/views', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ placeId: p.id, placeName: p.name, lat: p.lat, lon: p.lon, searchId: searchRef.current }) });
-    if (res.status === 401) { setOpenState({ loading: false, needLogin: true }); setLoginPop(true); }
+    if (res.status === 401) { setOpenState({ loading: false, needLogin: true }); setLoginWhy('views'); setLoginPop(true); }
     else if (res.status === 402) setOpenState({ loading: false, locked: true });
     else if (res.ok) { const j = await res.json(); setOpenState({ loading: false, reports: j.reports }); if (j.anonLeft != null) setMe(x => x ? { ...x, anonLeft: j.anonLeft } : x); }
     else setOpenState({ loading: false, reports: [] });
@@ -205,7 +242,7 @@ export default function Home() {
   const vote = async (r: Report, v: 1 | -1) => {
     const next = r.my_vote === v ? 0 : v;
     const res = await fetch('/api/votes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reportId: r.id, vote: next }) });
-    if (res.status === 401) return setLoginPop(true);
+    if (res.status === 401) { setLoginWhy('report'); return setLoginPop(true); }
     if (!res.ok) return say('הדירוג לא נשמר.');
     const j = await res.json();
     setOpenState(s => ({ ...s, reports: s.reports?.map(x => x.id === r.id ? { ...x, up: j.up, down: j.down, my_vote: next || null } : x) }));
@@ -216,14 +253,29 @@ export default function Home() {
     }
     if (next === -1 && open) { say('שילמת יותר? ספר כמה. הדיווח שלך ייחשב ויפתח 5 חיפושים.'); setReporting(open); }
   };
-  const afterReport = async (msg: string) => {
+  const afterReport = async (msg: string, share?: ShareInfo) => {
     const p = reporting;
     setReporting(null); say(msg);
+    if (share) setShareInfo(share);
     const m = await refreshMe();
     const sid = areaRef.current ? await startSearch(areaRef.current, m) : null;
     loadListPrices(places, sid ?? searchRef.current);
     if (p && p !== 'manual') openPlace(p);
     else if (open) openPlace(open);
+  };
+  /** "I'm sleeping here now": fresh GPS -> nearest stays -> pick -> short report form. */
+  const sleepHere = () => {
+    if (!me?.user) { setLoginWhy('report'); setLoginPop(true); return; }
+    if (!navigator.geolocation) { setReporting('manual'); return; }
+    setSleepPick({ status: 'locating', places: [] });
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const { latitude: lat, longitude: lon } = pos.coords;
+      setMyPos({ lat, lon });
+      const [near, country] = await Promise.all([nearbyStays(lat, lon, 600).catch(() => [] as Place[]), countryAt(lat, lon)]);
+      const list = near.slice(0, 6).map(p => ({ ...p, country: p.country ?? country ?? undefined }));
+      setSleepPick(list.length ? { status: 'ready', places: list } : { status: 'error', places: [], msg: 'לא מצאתי מקומות לינה במפה ממש לידך. אפשר לדווח ידנית.' });
+    }, () => setSleepPick({ status: 'error', places: [], msg: 'לא קיבלתי מיקום. אפשר לאשר מיקום בהגדרות הדפדפן, או לדווח ידנית.' }),
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
   };
   const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); setSearchId(null); setListPrices({}); refreshMe(); };
 
@@ -304,6 +356,7 @@ export default function Home() {
     <a className="gh" href={GITHUB_URL} target="_blank" rel="noopener"><GitHubIcon /> קוד פתוח ב-GitHub. רוצה לעזור? מוזמן לתרום</a>
     <p>מפה ומקומות: <bdi><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></bdi></p>
     <p>שערי מטבע (יומי, להמחשה): <bdi><a href="https://www.exchangerate-api.com" target="_blank" rel="noopener">Rates By Exchange Rate API</a></bdi></p>
+    <p>אמוג׳י בכרטיס השיתוף: <bdi><a href="https://github.com/jdecked/twemoji" target="_blank" rel="noopener">Twemoji</a></bdi>, CC-BY 4.0</p>
     <p>המיקום משמש רק לחיפוש ולא נשמר. המחירים מוצגים בלי שם או מייל של המדווח.</p>
   </footer>;
 
@@ -312,10 +365,31 @@ export default function Home() {
 
     {loginPop && <div className="sheet-backdrop" role="dialog" aria-modal="true" onClick={() => setLoginPop(false)}>
       <div className="sheet" onClick={e => e.stopPropagation()}>
-        <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>נגמרו 3 הצפיות החינמיות</h2>
-        <p>התחבר כדי להמשיך. אחרי ההתחברות, כל דיווח על מחיר ששילמת, או 👍 על דיווח של מישהו אחר, פותח לך 5 חיפושים עם מחירים.</p></div>
+        <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>{loginWhy === 'report' ? 'רק להתחבר, וממשיכים' : 'נגמרו 3 הצפיות החינמיות'}</h2>
+        <p>{loginWhy === 'report' ? 'הדיווח אנונימי: לא מוצגים שם או מייל. ההתחברות רק מונעת דיווחים כפולים.' : 'התחבר כדי להמשיך.'} אחרי ההתחברות, כל דיווח על מחיר ששילמת, או 👍 על דיווח של מישהו אחר, פותח לך 5 חיפושים עם מחירים.</p></div>
         <a className="btn primary block" href="/api/auth/google">התחבר עם Google</a>
         <button className="btn ghost block" onClick={() => setLoginPop(false)}>אחר כך</button>
+      </div>
+    </div>}
+
+    {shareInfo && <ShareSheet info={shareInfo} onClose={() => setShareInfo(null)} />}
+
+    {sleepPick && <div className="sheet-backdrop" role="dialog" aria-modal="true" onClick={() => setSleepPick(null)}>
+      <div className="sheet" onClick={e => e.stopPropagation()}>
+        <div className="sheet-step"><div className="sheet-icon">😴</div><h2>איפה אתה ישן?</h2>
+          {sleepPick.status === 'locating' && <p>מאתר את המיקום שלך ומחפש מה קרוב…</p>}
+          {sleepPick.status === 'error' && <p>{sleepPick.msg}</p>}
+          {sleepPick.status === 'ready' && <p>בחר את המקום, תכתוב מחיר, וזהו. 10 שניות.</p>}
+        </div>
+        {sleepPick.status === 'locating' && <ul className="places">{[0, 1, 2].map(i => <li key={i} className="card skeleton row-skel" />)}</ul>}
+        {sleepPick.status === 'ready' && <ul className="sleep-list">{sleepPick.places.map((p, i) => <li key={p.id}>
+          <button className={`sleep-opt ${i === 0 ? 'first' : ''}`} onClick={() => { setSleepPick(null); setOpen(null); setReporting(p); }}>
+            <span className="sleep-kind">{KIND_ICON[p.kind] ?? '🏠'}</span>
+            <span className="place-body"><span className="name">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
+            {i === 0 && <span className="badge known">הכי קרוב</span>}
+          </button></li>)}</ul>}
+        {sleepPick.status !== 'locating' && <button className="btn block" onClick={() => { setSleepPick(null); setOpen(null); setReporting('manual'); }}>המקום שלי לא ברשימה</button>}
+        <button className="btn ghost block" onClick={() => setSleepPick(null)}>ביטול</button>
       </div>
     </div>}
 
@@ -344,6 +418,7 @@ export default function Home() {
           <p>מחירים אמיתיים ממטיילים כמוך, לפי המקום שבו אתה נמצא. תדע מה סביר לפני שאתה מתמקח.</p>
           <button className="btn primary big block" onClick={() => locate()}>{status === 'locating' ? 'מאתר את המיקום שלך…' : '📍 מצא מחירים לידי'}</button>
           <button className="btn glass big block" onClick={() => setPicker(!picker)}>🔎 בחר אזור</button>
+          <button className="btn sleep big block" onClick={sleepHere}>😴 אני ישן כאן עכשיו · דיווח ב-10 שניות</button>
           {message && <p className="hero-msg">{message}</p>}
         </div>
       </div>
@@ -412,7 +487,7 @@ export default function Home() {
             : !rs.length ? <div className="card cta">
                 <h3>עדיין אין דיווחים</h3>
                 <p>היית כאן? הדיווח שלך יעזור לבא אחריך.</p>
-                <button className="btn primary block" onClick={() => loggedIn ? setReporting(open) : setLoginPop(true)}>שילמתי כאן, אדווח</button>
+                <button className="btn primary block" onClick={() => loggedIn ? setReporting(open) : (setLoginWhy('report'), setLoginPop(true))}>שילמתי כאן, אדווח</button>
               </div>
             : <>
                 {summary && <div className="card price-card">
@@ -435,7 +510,7 @@ export default function Home() {
                   </div>
                 </li>; })}</ul>
                 <div className="card cta slogan"><h3>{SLOGAN} 😉</h3><p>שילמת כאן? הדיווח שלך עוזר לבא אחריך.</p>
-                <button className="btn primary block" onClick={() => loggedIn ? setReporting(open) : setLoginPop(true)}>שילמתי כאן, אדווח</button></div>
+                <button className="btn primary block" onClick={() => loggedIn ? setReporting(open) : (setLoginWhy('report'), setLoginPop(true))}>שילמתי כאן, אדווח</button></div>
               </>}
           </section>
 
@@ -451,6 +526,7 @@ export default function Home() {
               </div>
             </div>
             {gate && <div className={`gate ${gate.ok ? 'ok' : ''}`}>{gate.ok ? '🔓' : '🎟️'} {gate.t}</div>}
+            <button className="btn sleep block" onClick={sleepHere}>😴 אני ישן כאן עכשיו · דיווח ב-10 שניות</button>
             {picker && <div className="card">{Picker}</div>}
             {area && <StayMap center={area} places={places} counts={counts} me={myPos} onSelect={openPlace} />}
             {message && <p className="muted">{message}</p>}
