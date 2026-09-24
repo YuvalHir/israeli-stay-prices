@@ -30,8 +30,16 @@ function GitHubIcon() {
   return <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg>;
 }
 
-function Thumb({ place, size = 'sm' }: { place: Pick<Place, 'kind'>; size?: 'sm' | 'lg' }) {
+type Photo = { src: string; page: string; author: string; license: string; licenseUrl?: string; area?: boolean; title?: string };
+function Thumb({ place, size = 'sm', photo }: { place: Pick<Place, 'kind'>; size?: 'sm' | 'lg'; photo?: Photo | null }) {
+  const [bad, setBad] = useState(false);
+  useEffect(() => setBad(false), [photo?.src]);
+  if (photo && !bad) return <div className={`thumb ${size} photo`}><img src={photo.src} alt="" loading="lazy" decoding="async" onError={() => setBad(true)} />{photo.area && size === 'sm' && <i className="area-tag">אזור</i>}</div>;
   return <div className={`thumb ${size} ph ph-${place.kind}`} aria-hidden="true"><span>{KIND_ICON[place.kind] ?? '🏠'}</span></div>;
+}
+function PhotoCredit({ photo }: { photo: Photo }) {
+  return <p className="photo-credit">📷 {photo.area ? <>תמונה של האזור{photo.title ? ` (${photo.title})` : ''}, לא של המקום עצמו · </> : null}
+    <bdi><a href={photo.page} target="_blank" rel="noopener">{photo.author}</a></bdi> · {photo.licenseUrl ? <a href={photo.licenseUrl} target="_blank" rel="noopener"><bdi>{photo.license}</bdi></a> : <bdi>{photo.license}</bdi>} · Wikimedia Commons</p>;
 }
 
 function ReportForm({ place, area, country, onDone, onCancel }: { place: Place | null; area: string; country: string | null; onDone: (msg: string, share?: ShareInfo) => void; onCancel: () => void }) {
@@ -178,6 +186,13 @@ export default function Home() {
   const [sugs, setSugs] = useState<Suggestion[]>([]);
   const [sugOpen, setSugOpen] = useState(false);
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
+  const [photos, setPhotos] = useState<{ places: Record<string, Photo>; area: Photo[] }>({ places: {}, area: [] });
+  const photoFor = (p: Place): Photo | null => {
+    const own = photos.places[p.id]; if (own) return own;
+    if (!photos.area.length) return null;
+    let h = 0; for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return photos.area[h % photos.area.length];
+  };
   const [a2hs, setA2hs] = useState<null | 'native' | 'ios'>(null);
   const [ios, setIos] = useState(false);
   const [installed, setInstalled] = useState(true);
@@ -239,6 +254,10 @@ export default function Home() {
         found.push({ id: r.id, name: r.name, kind: r.kind ?? 'guest_house', lat: r.lat, lon: r.lon, country: r.country ?? undefined, distance: d });
       }
       found.sort((x, y) => (x.distance ?? 0) - (y.distance ?? 0));
+      setPhotos({ places: {}, area: [] });
+      const ids = found.filter(p => p.id.startsWith('osm-')).slice(0, 60).map(p => p.id).join(',');
+      fetch(`/api/photos?lat=${a.lat.toFixed(3)}&lon=${a.lon.toFixed(3)}&ids=${ids}`).then(r => r.json())
+        .then(j => { if (areaRef.current === a) setPhotos({ places: j.places ?? {}, area: j.area ?? [] }); }).catch(() => {});
       setCounts(Object.fromEntries(reported.map(r => [r.id, r.n])));
       setPlaces(found); setStatus('ready');
       if (!found.length) { setMessage('לא נמצאו מקומות לינה במפה ברדיוס 2 ק״מ. אפשר לדווח ידנית.'); return; }
@@ -413,6 +432,7 @@ export default function Home() {
     <a className="gh" href={GITHUB_URL} target="_blank" rel="noopener"><GitHubIcon /> קוד פתוח ב-GitHub. רוצה לעזור? מוזמן לתרום</a>
     <p>מפה ומקומות: <bdi><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></bdi></p>
     <p>שערי מטבע (יומי, להמחשה): <bdi><a href="https://www.exchangerate-api.com" target="_blank" rel="noopener">Rates By Exchange Rate API</a></bdi></p>
+    <p>תמונות: <bdi><a href="https://commons.wikimedia.org" target="_blank" rel="noopener">Wikimedia Commons</a></bdi>, ברישיונות חופשיים. הקרדיט לכל תמונה בדף המקום. התמונות לא נשמרות אצלנו.</p>
     <p>אמוג׳י בכרטיס השיתוף: <bdi><a href="https://github.com/jdecked/twemoji" target="_blank" rel="noopener">Twemoji</a></bdi>, CC-BY 4.0</p>
     <p>המיקום משמש רק לחיפוש ולא נשמר. המחירים מוצגים בלי שם או מייל של המדווח.</p>
   </footer>;
@@ -510,7 +530,8 @@ export default function Home() {
 
         : open ? <section className="detail">
             <button className="back" onClick={() => setOpen(null)}>→ חזרה לרשימה</button>
-            <Thumb place={open} size="lg" />
+            <Thumb place={open} size="lg" photo={photoFor(open)} />
+            {photoFor(open) && <PhotoCredit photo={photoFor(open)!} />}
             <h1 className="place-title">{open.name}</h1>
             {Number.isFinite(open.lat) && <div className="maps">
               {[
@@ -596,13 +617,14 @@ export default function Home() {
               </div>
               {onlyKnown && !knownCount && <p className="muted center">עוד אין מחירים באזור. תהיה הראשון לדווח!</p>}
               <ul className="places">{shown.map(p => { const n = counts[p.id] ?? 0; return <li key={p.id}><button className="card place" onClick={() => openPlace(p)}>
-                <Thumb place={p} />
+                <Thumb place={p} photo={photoFor(p)} />
                 <span className="place-body"><span className="name">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
                 {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span>
                   : n ? <span className="badge locked price"><b>🔒 ₪••</b><small>{n === 1 ? 'דיווח 1' : `${n} דיווחים`}</small></span>
                   : <span className="badge">אין דיווחים</span>}
               </button></li>; })}</ul>
             </>}
+            {status === 'ready' && (photos.area.length > 0 || Object.keys(photos.places).length > 0) && <p className="photo-credit center">📷 תמונות חופשיות מ-Wikimedia Commons. תמונה עם תגית ״אזור״ היא של הסביבה, לא של המקום. קרדיט מלא בדף המקום.</p>}
             <div className="card cta">
               <h3>לא מופיע ברשימה?</h3>
               <button className="btn block" onClick={() => loggedIn ? setReporting('manual') : (location.href = '/api/auth/google')}>דווח מחיר ידנית</button>
