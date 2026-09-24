@@ -287,7 +287,14 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   }, [search]);
   const pickSug = (sg: Suggestion) => { setSugOpen(false); setSearch(''); setSugs([]); loadArea({ name: sg.name, lat: sg.lat, lon: sg.lon, country: sg.country }); };
 
-  const say = (m: string) => { setToast(m); setTimeout(() => setToast(t => t === m ? '' : t), 4500); };
+  const [toastOut, setToastOut] = useState(false);
+  const toastTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const hideToast = (m?: string) => { setToastOut(true); toastTimers.current.push(setTimeout(() => { setToast(t => (m === undefined || t === m) ? '' : t); setToastOut(false); }, 280)); };
+  const say = (m: string) => {
+    toastTimers.current.forEach(clearTimeout); toastTimers.current = [];
+    setToastOut(false); setToast(m);
+    toastTimers.current.push(setTimeout(() => hideToast(m), 4200));
+  };
   const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then((m: Me) => { setMe(m); return m; }).catch(() => { const m = { user: null }; setMe(m); return m as Me; });
   const loadListPrices = (list: Place[], sid: string | null) => {
     if (!list.length) return;
@@ -549,7 +556,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   </footer>;
 
   return <>
-    {toast && <div className="toast" role="status">{toast}</div>}
+    {toast && <div key={toast} className={`toast${toastOut ? ' out' : ''}`} role="status" onClick={() => hideToast()}>{toast}</div>}
 
     {loginPop && <Sheet onClose={() => setLoginPop(false)}>{dismiss => <>
         <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>{loginWhy === 'report' ? 'רק להתחבר, וממשיכים' : 'נגמרו 3 הצפיות החינמיות'}</h2>
