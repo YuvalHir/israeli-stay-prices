@@ -363,3 +363,10 @@ body { text-rendering: optimizeLegibility; }
 /* Round 8b: denser header glass so scrolled rows read as a soft blur, not text */
 .header { background: rgba(246,243,238,.93); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .header { background: rgb(246,243,238); } }
+/* Round 10: sheets slide away instead of vanishing; drag-to-dismiss */
+@keyframes fadeOut { to { opacity: 0; } }
+@keyframes sheetDown { to { transform: translateY(105%); } }
+.sheet-backdrop.closing { animation: fadeOut .26s var(--ease) forwards; pointer-events: none; }
+.sheet-backdrop.closing .sheet { animation: sheetDown .26s cubic-bezier(.4,0,.9,.6) forwards; }
+.sheet { will-change: transform; overscroll-behavior: contain; }
+@media (min-width: 640px) { @keyframes sheetDown { to { transform: translateY(16px) scale(.97); opacity: 0; } } }

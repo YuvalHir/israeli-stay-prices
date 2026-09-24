@@ -120,16 +120,14 @@ function ShareSheet({ info, onClose }: { info: ShareInfo; onClose: () => void })
     if (canShareFile && file) { try { await navigator.share({ files: [file], text }); return; } catch (e: any) { if (e?.name === 'AbortError') return; } }
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   };
-  return <div className="sheet-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-    <div className="sheet share-sheet" onClick={e => e.stopPropagation()}>
+  return <Sheet onClose={onClose} className="share-sheet">{dismiss => <>
       <h2>ספר לחבריך 😉</h2>
       <p>שלח לקבוצת הטיול. ככה עוד חברים יידעו כמה לשלם, ויוסיפו מחירים משלהם.</p>
       <div className="share-preview">{url ? <img src={url} alt="כרטיס שיתוף עם המחיר ששילמת" /> : <div className="skeleton share-skel" />}</div>
       <button className="btn wa block big" onClick={share} disabled={!blob}><WhatsAppIcon /> שתף בוואטסאפ</button>
       {!canShareFile && url && <a className="btn block" href={url} download="mechir-lalayla.png">⬇️ שמור את התמונה</a>}
-      <button className="btn ghost block" onClick={onClose}>אחר כך</button>
-    </div>
-  </div>;
+      <button className="btn ghost block" onClick={dismiss}>אחר כך</button>
+    </>}</Sheet>;
 }
 
 /** Add-to-home-screen offer: native prompt on Android/Chrome, instructions on iOS. Shown at a good moment, never when installed. */
@@ -147,8 +145,7 @@ function ShareGlyph() {
 
 function InstallSheet({ ios, onInstall, onClose }: { ios: boolean; onInstall: () => void; onClose: () => void }) {
   const safari = ios && !/CriOS|FxiOS|EdgiOS|GSA\//.test(navigator.userAgent);
-  return <div className="sheet-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-    <div className="sheet" onClick={e => e.stopPropagation()}>
+  return <Sheet onClose={onClose}>{dismiss => <>
       <div className="sheet-step">
         <img className="a2hs-icon" src="/icons/icon-192.png" alt="" />
         <h2>שים את מחיר ללילה במסך הבית</h2>
@@ -160,8 +157,53 @@ function InstallSheet({ ios, onInstall, onClose }: { ios: boolean; onInstall: ()
         <li><span>3</span><div>לוחצים <b>״הוספה״</b> למעלה, וזהו</div></li>
       </ol>
       : <button className="btn primary block big" onClick={onInstall}>📲 הוסף למסך הבית</button>}
-      <button className="btn ghost block" onClick={onClose}>{ios ? 'הבנתי' : 'לא עכשיו'}</button>
-    </div>
+      <button className="btn ghost block" onClick={dismiss}>{ios ? 'הבנתי' : 'לא עכשיו'}</button>
+    </>}</Sheet>;
+}
+
+/**
+ * Bottom sheet with iOS-like manners: slides away on close instead of vanishing,
+ * and can be dragged down to dismiss. `children` gets a `dismiss` that animates out first.
+ */
+function Sheet({ onClose, className = '', children }: { onClose?: () => void; className?: string; children: (dismiss: () => void) => React.ReactNode }) {
+  const [closing, setClosing] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const done = useRef(false);
+  const dismiss = () => {
+    if (!onClose || done.current) return;
+    done.current = true; setClosing(true);
+    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    setTimeout(onClose, reduce ? 0 : 260);
+  };
+  useEffect(() => {
+    const el = ref.current; if (!el || !onClose) return;
+    let y0 = 0, x0 = 0, t0 = 0, dy = 0, active = false, dragging = false;
+    const start = (e: TouchEvent) => {
+      const t = e.target as HTMLElement;
+      const scroller = t.closest('.sleep-list, .ac-list') as HTMLElement | null;
+      if ((scroller && scroller.scrollTop > 0) || el.scrollTop > 0 || t.closest('input, textarea, select')) { active = false; return; }
+      active = true; dragging = false; dy = 0; y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; t0 = Date.now();
+    };
+    const move = (e: TouchEvent) => {
+      if (!active) return;
+      const d = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
+      if (!dragging) { if (d > 8 && d > dx) { dragging = true; el.style.transition = 'none'; } else if (Math.abs(d) > 8 || dx > 8) { active = false; return; } else return; }
+      dy = Math.max(0, d); if (e.cancelable) e.preventDefault();
+      el.style.transform = `translateY(${dy}px)`;
+    };
+    const end = () => {
+      if (!active) return; active = false; if (!dragging) return;
+      const v = dy / Math.max(1, Date.now() - t0);
+      el.style.transition = 'transform .32s cubic-bezier(.2,.9,.3,1.1)';
+      if (dy > 110 || v > 0.6) dismiss(); else el.style.transform = '';
+    };
+    el.addEventListener('touchstart', start, { passive: true });
+    el.addEventListener('touchmove', move, { passive: false });
+    el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
+    return () => { el.removeEventListener('touchstart', start); el.removeEventListener('touchmove', move); el.removeEventListener('touchend', end); el.removeEventListener('touchcancel', end); };
+  }, [onClose]);
+  return <div className={`sheet-backdrop${closing ? ' closing' : ''}`} role="dialog" aria-modal="true" onClick={dismiss}>
+    <div ref={ref} className={`sheet ${className}`} onClick={e => e.stopPropagation()}>{children(dismiss)}</div>
   </div>;
 }
 
@@ -509,20 +551,17 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   return <>
     {toast && <div className="toast" role="status">{toast}</div>}
 
-    {loginPop && <div className="sheet-backdrop" role="dialog" aria-modal="true" onClick={() => setLoginPop(false)}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
+    {loginPop && <Sheet onClose={() => setLoginPop(false)}>{dismiss => <>
         <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>{loginWhy === 'report' ? 'רק להתחבר, וממשיכים' : 'נגמרו 3 הצפיות החינמיות'}</h2>
         <p>{loginWhy === 'report' ? 'הדיווח אנונימי: לא מוצגים שם או מייל. ההתחברות רק מונעת דיווחים כפולים.' : 'התחבר כדי להמשיך.'} אחרי ההתחברות, כל דיווח על מחיר ששילמת, או 👍 על דיווח של מישהו אחר, פותח לך 5 חיפושים עם מחירים.</p></div>
         <a className="btn primary block" href="/api/auth/google">התחבר עם Google</a>
-        <button className="btn ghost block" onClick={() => setLoginPop(false)}>אחר כך</button>
-      </div>
-    </div>}
+        <button className="btn ghost block" onClick={dismiss}>אחר כך</button>
+      </>}</Sheet>}
 
     {shareInfo && <ShareSheet info={shareInfo} onClose={() => { setShareInfo(null); setTimeout(() => offerInstall(), 600); }} />}
     {a2hs && !shareInfo && !onboarding && !loginPop && !sleepPick && <InstallSheet ios={a2hs === 'ios'} onInstall={doInstall} onClose={closeA2hs} />}
 
-    {sleepPick && <div className="sheet-backdrop" role="dialog" aria-modal="true" onClick={() => setSleepPick(null)}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
+    {sleepPick && <Sheet onClose={() => setSleepPick(null)}>{dismiss => <>
         <div className="sheet-step"><div className="sheet-icon">😴</div><h2>איפה אתה ישן?</h2>
           {sleepPick.status === 'locating' && <p>מאתר את המיקום שלך ומחפש מה קרוב…</p>}
           {sleepPick.status === 'error' && <p>{sleepPick.msg}</p>}
@@ -536,9 +575,8 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             {i === 0 && <span className="badge known">הכי קרוב</span>}
           </button></li>)}</ul>}
         {sleepPick.status !== 'locating' && <button className="btn block" onClick={() => { setSleepPick(null); setOpen(null); setReporting('manual'); }}>המקום שלי לא ברשימה</button>}
-        <button className="btn ghost block" onClick={() => setSleepPick(null)}>ביטול</button>
-      </div>
-    </div>}
+        <button className="btn ghost block" onClick={dismiss}>ביטול</button>
+      </>}</Sheet>}
 
     {onboarding && <div className="sheet-backdrop" role="dialog" aria-modal="true">
       <div className="sheet">
