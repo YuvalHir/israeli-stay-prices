@@ -206,3 +206,4 @@ p { line-height: 1.55; }
 .map-btn small { font-size: 12px; color: var(--ink2); }
 .map-btn.nav { background: var(--ink); color: #fff; border-color: var(--ink); }
 .map-btn.nav small { color: rgba(255,255,255,.75); }
+.map-btn.wide { grid-column: 1 / -1; }

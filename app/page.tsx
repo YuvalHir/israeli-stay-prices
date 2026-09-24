@@ -344,6 +344,7 @@ export default function Home() {
               <a className="map-btn" href={`https://maps.apple.com/?q=${encodeURIComponent(open.name)}&ll=${open.lat},${open.lon}`} target="_blank" rel="noopener"><b>Apple Maps</b><small>פתח מיקום</small></a>
               <a className="map-btn nav" href={`https://www.google.com/maps/dir/?api=1&destination=${open.lat},${open.lon}`} target="_blank" rel="noopener"><b>🧭 ניווט</b><small>Google Maps</small></a>
               <a className="map-btn nav" href={`https://maps.apple.com/?daddr=${open.lat},${open.lon}&q=${encodeURIComponent(open.name)}`} target="_blank" rel="noopener"><b>🧭 ניווט</b><small>Apple Maps</small></a>
+              <a className="map-btn wide" href={`https://fr.mappy.com/itineraire#/vers/${open.lat},${open.lon}/`} target="_blank" rel="noopener"><b>Mappy</b><small>מסלול (בעיקר אירופה)</small></a>
             </div>}
             <div className="chips static">
               <span className="chip">{KIND_ICON[open.kind] ?? '🏠'} {kindLabel(open.kind)}</span>
