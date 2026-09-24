@@ -99,8 +99,8 @@ function ReportForm({ place, area, country, onDone, onCancel }: { place: Place |
     </div>
     <label className="field"><span>הערה (לא חובה)</span><input value={note} onChange={e => setNote(e.target.value)} placeholder="למשל: כולל ארוחת בוקר, התמקחתי מ-2000" /></label>
     {error && <div className="note warn">{error}</div>}
-    <div className="form-actions"><button className="btn primary block big" disabled={busy} onClick={submit}>{busy ? <span className="spinner" aria-hidden="true" /> : null}{busy ? 'שומר…' : 'שמור מחיר'}</button></div>
-    <p className="muted small center">הדיווח מוצג בלי שם ובלי מייל.</p>
+    <div className="form-actions"><button className="btn primary block big" disabled={busy} onClick={submit}>{busy ? <span className="spinner" aria-hidden="true" /> : null}{busy ? 'שומר…' : 'שמור מחיר'}</button>
+    <p className="muted small center anon-note">🔒 הדיווח מוצג בלי שם ובלי מייל.</p></div>
   </section>;
 }
 
