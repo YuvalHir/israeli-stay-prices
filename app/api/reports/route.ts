@@ -49,7 +49,9 @@ export async function POST(req: NextRequest) {
       !isCurrency(b.currency) || !['dorm', 'private'].includes(b.room)) {
     return NextResponse.json({ error: 'bad_request' }, { status: 400 });
   }
-  const placeId = b.placeId?.trim() || `manual-${b.placeName.trim().toLowerCase()}`;
+  // Manual places are keyed by country + area + name, so same-named places in different towns stay separate.
+  const slug = (x?: string) => (x ?? '').trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
+  const placeId = b.placeId?.trim() || `manual-${(b.country ?? 'xx').toLowerCase()}-${slug(b.area) || 'area'}-${slug(b.placeName)}`;
   const month = /^\d{4}-\d{2}$/.test(b.stayMonth ?? '') ? b.stayMonth! : new Date().toISOString().slice(0, 7);
   const { DB } = await env();
   await DB.prepare(

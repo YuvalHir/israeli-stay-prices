@@ -15,10 +15,13 @@ Gate: a visitor can open 3 places per browser session (anon cookie). Then login.
 - Deployed by GitHub Actions (`.github/workflows/deploy.yml`) on every push to `main`: runs D1 migrations, then `npm run deploy`.
 
 ## Layout
-- `app/page.tsx` - the whole client UI (landing, onboarding, area/map list, place detail, report form, votes)
+- `components/App.tsx` - the whole client UI (landing, onboarding, area/map list, place detail, report form, votes, share)
+- `app/page.tsx` - home route, renders `App`
+- `app/p/[key]/[[...slug]]/page.tsx` - server-rendered place page `/p/<osm-type>-<osm-id>/<slug>` (unique OSM id is the key, slug is cosmetic and redirects to canonical). Metadata, canonical, OG, schema.org JSON-LD. Never render prices on the server: they go through the gate in the browser.
+- `app/sitemap.ts`, `app/robots.ts` - sitemap of places with reports; robots disallows `/api/` and `/admin`
 - `app/admin/page.tsx` - admin panel (stats, reports, users)
 - `app/api/*` - route handlers: `photos` (Wikimedia photos via OSM wikidata/commons tags, area fallback; hotlinked, never stored), `auth/{google,callback,me,logout}`, `reports` (GET counts / POST report), `views` (the 3-free-views gate + prices), `votes` (👍 paid the same / 👎 paid more), `rates` (daily FX from ExchangeRate-API, cached 6h, attribution required), `geo` (country from `cf-ipcountry`), `admin`
-- `lib/` - `auth.ts` (sessions, `currentUser`, `currentAdmin`), `places.ts` (OSM lookups, quick areas), `currency.ts` (country -> currency, flags, formatting), `gate.ts`, `env.ts`
+- `lib/` - `placeUrl.ts` (place keys/slugs/paths), `placeLookup.ts` (Nominatim lookup by OSM id, D1 fallback), `photos.ts` (Wikimedia), `auth.ts` (sessions, `currentUser`, `currentAdmin`), `places.ts` (OSM lookups, quick areas), `currency.ts` (country -> currency, flags, formatting), `gate.ts`, `env.ts`
 - `components/StayMap.tsx` - Leaflet map, client-only (loaded with `next/dynamic`, `ssr: false`)
 - `migrations/` - numbered D1 SQL migrations. Never edit an applied migration's behaviour; add a new file.
 

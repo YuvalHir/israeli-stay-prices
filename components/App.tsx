@@ -4,6 +4,10 @@ import dynamic from 'next/dynamic';
 import { countryAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, suggestPlaces, type Area, type Place, type Suggestion } from '@/lib/places';
 import { currencyFor, currencyName, flagOf, FLAG_BY_CURRENCY, formatMoney } from '@/lib/currency';
 import { drawShareCard, shareText, type ShareInfo } from '@/lib/shareCard';
+import { placePath, SITE_URL } from '@/lib/placeUrl';
+
+export type { Photo };
+export type InitialPlace = Place & { locality?: string; region?: string; reports?: number; photo?: Photo | null };
 
 const GITHUB_URL = 'https://github.com/YuvalHir/israeli-stay-prices';
 const SLOGAN = 'התמקחת? ספר לחבריך';
@@ -155,9 +159,9 @@ function WhatsAppIcon() {
   return <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z"/></svg>;
 }
 
-export default function Home() {
+export default function App({ initialPlace = null }: { initialPlace?: InitialPlace | null }) {
   const [me, setMe] = useState<Me | null>(null);
-  const [area, setArea] = useState<Area | null>(null);
+  const [area, setArea] = useState<Area | null>(initialPlace && Number.isFinite(initialPlace.lat) ? { name: initialPlace.locality ?? initialPlace.name, lat: initialPlace.lat, lon: initialPlace.lon, country: initialPlace.country } : null);
   const [myPos, setMyPos] = useState<{ lat: number; lon: number } | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -170,8 +174,8 @@ export default function Home() {
   const [status, setStatus] = useState<'idle' | 'locating' | 'loading' | 'ready' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
-  const [open, setOpen] = useState<Place | null>(null);
-  const [openState, setOpenState] = useState<{ loading: boolean; locked?: boolean; needLogin?: boolean; reports?: Report[] }>({ loading: false });
+  const [open, setOpen] = useState<InitialPlace | null>(initialPlace);
+  const [openState, setOpenState] = useState<{ loading: boolean; locked?: boolean; needLogin?: boolean; reports?: Report[] }>({ loading: !!initialPlace });
   const [reporting, setReporting] = useState<Place | 'manual' | null>(null);
   const [toast, setToast] = useState('');
   const [installEvt, setInstallEvt] = useState<any>(null);
@@ -240,9 +244,9 @@ export default function Home() {
     return j.searchId;
   };
 
-  const loadArea = async (a: Area) => {
+  const loadArea = async (a: Area, keepOpen = false) => {
     if (!a.country) countryAt(a.lat, a.lon).then(c => { if (c) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, country: c } : cur); });
-    setListPrices({}); setSearchId(null); areaRef.current = a; setArea(a); setOpen(null); setReporting(null); setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
+    setListPrices({}); setSearchId(null); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
     try {
       const [osm, reported] = await Promise.all([
         nearbyStays(a.lat, a.lon).catch(() => [] as Place[]),
@@ -293,7 +297,12 @@ export default function Home() {
     if (lp === 'failed') say('ההתחברות עם Google לא הצליחה. נסה שוב.');
     if (lp) history.replaceState(null, '', '/');
     let seen = false; try { seen = localStorage.getItem('sp_onboarded') === '1'; } catch {}
-    if (at && at.length === 2 && at.every(Number.isFinite)) { history.replaceState(null, '', '/'); if (!seen) { try { localStorage.setItem('sp_onboarded', '1'); } catch {} } loadArea({ name: 'האזור ששותף', lat: at[0], lon: at[1] }); }
+    if (initialPlace) {
+      history.replaceState({ place: initialPlace }, '', location.pathname);
+      openPlace(initialPlace, false);
+      if (Number.isFinite(initialPlace.lat)) loadArea({ name: initialPlace.locality ?? initialPlace.name, lat: initialPlace.lat, lon: initialPlace.lon, country: initialPlace.country }, true);
+    }
+    else if (at && at.length === 2 && at.every(Number.isFinite)) { history.replaceState(null, '', '/'); if (!seen) { try { localStorage.setItem('sp_onboarded', '1'); } catch {} } loadArea({ name: 'האזור ששותף', lat: at[0], lon: at[1] }); }
     else if (!seen) setOnboarding(true); else locate(true);
     return () => { window.removeEventListener('beforeinstallprompt', h); window.removeEventListener('appinstalled', onInstalled); if (a2hsTimer) clearTimeout(a2hsTimer); };
   }, []);
@@ -306,8 +315,14 @@ export default function Home() {
     const a = await findArea(search.trim());
     if (a) loadArea(a); else { setStatus('idle'); setMessage('לא מצאתי את המקום. נסה שם אחר או באנגלית.'); }
   };
-  const openPlace = async (p: Place) => {
+  const pushedRef = useRef(false);
+  const openPlace = async (p: InitialPlace, push = true) => {
     setOpen(p);
+    if (typeof window !== 'undefined') {
+      const path = placePath(p);
+      if (push && location.pathname !== path) { history.pushState({ place: p }, '', path); pushedRef.current = true; }
+      document.title = `${p.name} · כמה ישראלים שילמו ללילה`;
+    }
     setOpenState({ loading: true });
     const res = await fetch('/api/views', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ placeId: p.id, placeName: p.name, lat: p.lat, lon: p.lon, searchId: searchRef.current }) });
     if (res.status === 401) { setOpenState({ loading: false, needLogin: true }); setLoginWhy('views'); setLoginPop(true); }
@@ -315,6 +330,31 @@ export default function Home() {
     else if (res.ok) { const j = await res.json(); setOpenState({ loading: false, reports: j.reports }); if (j.anonLeft != null) setMe(x => x ? { ...x, anonLeft: j.anonLeft } : x); }
     else setOpenState({ loading: false, reports: [] });
   };
+  const closePlace = () => {
+    if (pushedRef.current && history.state?.place) { pushedRef.current = false; history.back(); return; }
+    setOpen(null);
+  };
+  const sharePlace = async (p: InitialPlace) => {
+    const url = SITE_URL + placePath(p);
+    const text = `${p.name}${p.locality ? `, ${p.locality}` : ''} ${p.country ? flagOf(p.country) : ''}\nכמה ישראלים שילמו כאן ללילה? 👀`;
+    if (navigator.share) { try { await navigator.share({ title: p.name, text, url }); return; } catch (e: any) { if (e?.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(url); say('הקישור הועתק. אפשר להדביק בוואטסאפ 👍'); }
+    catch { window.open(`https://wa.me/?text=${encodeURIComponent(text + '\n' + url)}`, '_blank', 'noopener'); }
+  };
+  // Keep the URL in sync: a closed place page goes back to "/"; browser back/forward reopens or closes places.
+  useEffect(() => {
+    if (!open && typeof window !== 'undefined' && location.pathname.startsWith('/p/')) { history.replaceState(null, '', '/'); document.title = 'כמה ישראלים שילמו ללילה'; }
+    if (!open && typeof document !== 'undefined') document.title = 'כמה ישראלים שילמו ללילה';
+  }, [open]);
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const st = e.state as { place?: InitialPlace } | null;
+      setReporting(null);
+      if (st?.place) openPlace(st.place, false); else { pushedRef.current = false; setOpen(null); }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   const vote = async (r: Report, v: 1 | -1) => {
     const next = r.my_vote === v ? 0 : v;
     const res = await fetch('/api/votes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reportId: r.id, vote: next }) });
@@ -529,10 +569,14 @@ export default function Home() {
         {reporting ? <ReportForm place={reporting === 'manual' ? null : reporting} area={area?.name ?? ''} country={reportCountry} onDone={afterReport} onCancel={() => setReporting(null)} />
 
         : open ? <section className="detail">
-            <button className="back" onClick={() => setOpen(null)}>→ חזרה לרשימה</button>
-            <Thumb place={open} size="lg" photo={photoFor(open)} />
-            {photoFor(open) && <PhotoCredit photo={photoFor(open)!} />}
+            <div className="detail-top">
+              <button className="back" onClick={closePlace}>→ חזרה לרשימה</button>
+              <button className="chip share-btn" onClick={() => sharePlace(open)} aria-label="שתף את המקום"><ShareGlyph /> שתף</button>
+            </div>
+            <Thumb place={open} size="lg" photo={photos.places[open.id] ?? open.photo ?? photoFor(open)} />
+            {(photos.places[open.id] ?? open.photo ?? photoFor(open)) && <PhotoCredit photo={(photos.places[open.id] ?? open.photo ?? photoFor(open))!} />}
             <h1 className="place-title">{open.name}</h1>
+            {(open.locality || open.country) && <p className="muted place-where">{kindLabel(open.kind)}{open.locality ? ` ב-${open.locality}` : ''}{open.country ? ` ${flagOf(open.country)}` : ''}{open.reports ? ` · ${open.reports === 1 ? 'דיווח מחיר 1' : `${open.reports} דיווחי מחיר`}` : ''}</p>}
             {Number.isFinite(open.lat) && <div className="maps">
               {[
                 { name: 'Google Maps', domain: 'maps.google.com', href: `https://www.google.com/maps/dir/?api=1&destination=${open.lat},${open.lon}` },

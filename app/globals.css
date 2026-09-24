@@ -242,3 +242,6 @@ p { line-height: 1.55; }
 .photo-credit { font-size: 12px; color: var(--ink3); margin: -8px 0 12px; line-height: 1.5; }
 .photo-credit.center { margin: 8px 0; }
 .photo-credit a { color: var(--ink2); }
+.detail-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.share-btn { display: inline-flex; align-items: center; gap: 6px; }
+.place-where { margin: 4px 0 8px; }
