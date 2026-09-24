@@ -17,7 +17,7 @@ Gate: a visitor can open 3 places per browser session (anon cookie). Then login.
 ## Layout
 - `app/page.tsx` - the whole client UI (landing, onboarding, area/map list, place detail, report form, votes)
 - `app/admin/page.tsx` - admin panel (stats, reports, users)
-- `app/api/*` - route handlers: `auth/{google,callback,me,logout}`, `reports` (GET counts / POST report), `views` (the 3-free-views gate + prices), `votes` (👍 paid the same / 👎 paid more), `rates` (daily FX from ExchangeRate-API, cached 6h, attribution required), `geo` (country from `cf-ipcountry`), `admin`
+- `app/api/*` - route handlers: `photos` (Wikimedia photos via OSM wikidata/commons tags, area fallback; hotlinked, never stored), `auth/{google,callback,me,logout}`, `reports` (GET counts / POST report), `views` (the 3-free-views gate + prices), `votes` (👍 paid the same / 👎 paid more), `rates` (daily FX from ExchangeRate-API, cached 6h, attribution required), `geo` (country from `cf-ipcountry`), `admin`
 - `lib/` - `auth.ts` (sessions, `currentUser`, `currentAdmin`), `places.ts` (OSM lookups, quick areas), `currency.ts` (country -> currency, flags, formatting), `gate.ts`, `env.ts`
 - `components/StayMap.tsx` - Leaflet map, client-only (loaded with `next/dynamic`, `ssr: false`)
 - `migrations/` - numbered D1 SQL migrations. Never edit an applied migration's behaviour; add a new file.
@@ -40,7 +40,7 @@ Local secrets: copy `.dev.vars.example` to `.dev.vars`.
 - Never expose who reported a price (no name/email in public APIs). Admin API is the only place emails appear.
 - Every API that changes data must call `currentUser()` (or `currentAdmin()` for admin) first.
 - Currency codes are ISO 4217; country codes ISO 3166-1 alpha-2, uppercase.
-- Keep the free tier: no paid services, no API keys in the client, no image hosting for now.
+- Keep the free tier: no paid services, no API keys in the client. No image hosting: photos are hotlinked from Wikimedia Commons with author + license shown.
 - Respect OSM usage policies (attribution in the footer and map; no bulk scraping).
 
 ## Secrets and config (never commit)
@@ -49,7 +49,33 @@ Local secrets: copy `.dev.vars.example` to `.dev.vars`.
 - `CLOUDFLARE_API_TOKEN` - GitHub Actions secret used by the deploy workflow
 - Public config lives in `wrangler.jsonc` `vars` (`APP_URL`, `GOOGLE_CLIENT_ID`).
 
+## Commit messages
+
+We use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
+
+```
+<type>(<optional scope>): <subject>
+
+<optional body: what and why, wrapped at 72 chars>
+
+<optional footer: BREAKING CHANGE: ..., Closes #12>
+```
+
+- Types: `feat` (new feature), `fix` (bug fix), `docs`, `style` (formatting, no logic change), `refactor`, `perf`, `test`, `build` (deps, bundling), `ci`, `chore`.
+- Scopes are optional, for example `ui`, `api`, `gate`, `db`, `auth`, `admin`, `share`, `pwa`, `photos`.
+- Subject: imperative mood ("add", not "added"), lowercase after the colon, no trailing period, max ~72 chars, in English.
+- One logical change per commit. Put the reason in the body when it isn't obvious.
+- Breaking changes: add `!` after the type (`feat(api)!: ...`) and a `BREAKING CHANGE:` footer.
+
+Examples:
+```
+feat(photos): show Wikimedia photos for places with fallback to area photos
+fix(gate): count a like as a report only on other users' reports
+docs: document conventional commits
+```
+
 ## Before you open a PR
 1. `npx next build` passes (TypeScript clean).
 2. New tables/columns come with a new migration in `migrations/`.
 3. Check the change on a phone-sized screen in RTL.
+4. Commit messages follow Conventional Commits (see above).
