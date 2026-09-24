@@ -360,3 +360,6 @@ body { text-rendering: optimizeLegibility; }
 .sleep-list { grid-template-columns: minmax(0, 1fr); overflow-x: hidden; padding: 2px; margin: -2px -2px 12px; overscroll-behavior: contain; }
 .sleep-list li { min-width: 0; }
 .seg.filter { background: rgb(241,235,226); }
+/* Round 8b: denser header glass so scrolled rows read as a soft blur, not text */
+.header { background: rgba(246,243,238,.93); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .header { background: rgb(246,243,238); } }
