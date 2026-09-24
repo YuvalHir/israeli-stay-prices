@@ -38,3 +38,5 @@ Prices are shown without the reporter's name or email. Your location is only use
 
 ## License
 [MIT](./LICENSE)
+
+Google Maps, Apple Maps and Mappy names and icons are trademarks of their owners. The app only links to them; their icons are loaded from the services themselves and are not part of this repo or its license.

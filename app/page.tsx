@@ -380,11 +380,16 @@ export default function Home() {
             <Thumb place={open} size="lg" />
             <h1 className="place-title">{open.name}</h1>
             {Number.isFinite(open.lat) && <div className="maps">
-              <a className="map-btn" href={`https://www.google.com/maps/search/?api=1&query=${open.lat},${open.lon}`} target="_blank" rel="noopener"><b>Google Maps</b><small>פתח מיקום</small></a>
-              <a className="map-btn" href={`https://maps.apple.com/?q=${encodeURIComponent(open.name)}&ll=${open.lat},${open.lon}`} target="_blank" rel="noopener"><b>Apple Maps</b><small>פתח מיקום</small></a>
-              <a className="map-btn nav" href={`https://www.google.com/maps/dir/?api=1&destination=${open.lat},${open.lon}`} target="_blank" rel="noopener"><b>🧭 ניווט</b><small>Google Maps</small></a>
-              <a className="map-btn nav" href={`https://maps.apple.com/?daddr=${open.lat},${open.lon}&q=${encodeURIComponent(open.name)}`} target="_blank" rel="noopener"><b>🧭 ניווט</b><small>Apple Maps</small></a>
-              <a className="map-btn wide" href={`https://fr.mappy.com/itineraire#/vers/${open.lat},${open.lon}/`} target="_blank" rel="noopener"><b>Mappy</b><small>מסלול (בעיקר אירופה)</small></a>
+              {[
+                { name: 'Google Maps', domain: 'maps.google.com', href: `https://www.google.com/maps/dir/?api=1&destination=${open.lat},${open.lon}` },
+                { name: 'Apple Maps', domain: 'maps.apple.com', href: `https://maps.apple.com/?daddr=${open.lat},${open.lon}&q=${encodeURIComponent(open.name)}` },
+                { name: 'Mappy', domain: 'mappy.com', href: `https://fr.mappy.com/itineraire#/vers/${open.lat},${open.lon}/` },
+              ].map((m) => (
+                <a key={m.name} className="map-icon" href={m.href} target="_blank" rel="noopener" aria-label={`ניווט ב-${m.name}`} title={`ניווט ב-${m.name}`}>
+                  {/* Official app icons are loaded from the services' own favicons, not bundled in this MIT repo. */}
+                  <img src={`https://www.google.com/s2/favicons?domain=${m.domain}&sz=128`} alt={m.name} width={44} height={44} loading="lazy" referrerPolicy="no-referrer" />
+                </a>
+              ))}
             </div>}
             <div className="chips static">
               <span className="chip">{KIND_ICON[open.kind] ?? '🏠'} {kindLabel(open.kind)}</span>

@@ -200,15 +200,13 @@ p { line-height: 1.55; }
 .badge.price b { font-size: 14px; }
 .badge.price small { font-size: 11px; font-weight: 500; opacity: .85; }
 @media (max-width: 380px) { .brand span { display: none; } }
-.maps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 4px; }
-.map-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 52px; border: 1px solid var(--line); background: var(--card); border-radius: 14px; text-decoration: none; box-shadow: var(--shadow); }
-.map-btn b { font-size: 14px; }
-.map-btn small { font-size: 12px; color: var(--ink2); }
-.map-btn.nav { background: var(--ink); color: #fff; border-color: var(--ink); }
-.map-btn.nav small { color: rgba(255,255,255,.75); }
-.map-btn.wide { grid-column: 1 / -1; }
 .brand span { white-space: nowrap; }
 .disp-select { width: auto; max-width: 118px; padding-inline: 10px; text-overflow: ellipsis; }
 .header nav { gap: 6px; }
 @media (max-width: 420px) { .brand span { display: none; } }
 .badge.locked { background: var(--sand); color: var(--ink2); }
+
+.maps { display: flex; justify-content: center; gap: 16px; margin: 10px 0 14px; }
+.map-icon { width: 60px; height: 60px; display: grid; place-items: center; border-radius: 16px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); transition: transform .12s; }
+.map-icon:active { transform: scale(.94); }
+.map-icon img { width: 44px; height: 44px; border-radius: 10px; object-fit: contain; }
