@@ -207,3 +207,7 @@ p { line-height: 1.55; }
 .map-btn.nav { background: var(--ink); color: #fff; border-color: var(--ink); }
 .map-btn.nav small { color: rgba(255,255,255,.75); }
 .map-btn.wide { grid-column: 1 / -1; }
+.brand span { white-space: nowrap; }
+.disp-select { width: auto; max-width: 118px; padding-inline: 10px; text-overflow: ellipsis; }
+.header nav { gap: 6px; }
+@media (max-width: 420px) { .brand span { display: none; } }
