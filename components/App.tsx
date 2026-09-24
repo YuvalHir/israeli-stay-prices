@@ -85,21 +85,21 @@ function ReportForm({ place, area, country, onDone, onCancel }: { place: Place |
     {place ? <p className="muted">{KIND_ICON[place.kind] ?? '🏠'} {place.name} · {kindLabel(place.kind)}</p> :
       <label className="field"><span>שם המקום</span><input value={name} onChange={e => setName(e.target.value)} placeholder="למשל Hotel Yog" /></label>}
     <label className="field"><span>מחיר ללילה</span>
-      <div className="price-input"><input inputMode="decimal" autoFocus={!!place} value={price} onChange={e => setPrice(e.target.value)} placeholder="0" /><b>{curFlag(currency, country)} {currency}</b></div>
+      <div className="price-input"><input inputMode="decimal" dir="ltr" autoFocus={!!place} value={price} onChange={e => setPrice(e.target.value)} placeholder="0" /><b>{curFlag(currency, country)} {currency}</b></div>
     </label>
     <div className="field"><span>מטבע</span>
-      <div className="seg">{options.map(c => <button key={c} className={currency === c ? 'on' : ''} onClick={() => setCurrency(c)}>{curFlag(c, country)} {currencyName(c)}</button>)}</div></div>
+      <div className="seg">{options.map(c => <button key={c} className={currency === c ? 'on' : ''} onClick={() => setCurrency(c)}>{curFlag(c, country)} {c === 'USD' ? 'דולר' : c === 'ILS' ? 'שקל' : currencyName(c)}</button>)}</div></div>
     <div className="field"><span>סוג לינה</span>
       <div className="seg">{(['private', 'dorm'] as const).map(r => <button key={r} className={room === r ? 'on' : ''} onClick={() => setRoom(r)}>{ROOM_HE[r]}</button>)}</div></div>
     <div className="two">
       <div className="field"><span>כמה לילות</span>
-        <div className="stepper"><button onClick={() => setNights(Math.max(1, nights - 1))} aria-label="פחות">−</button><b>{nights}</b><button onClick={() => setNights(Math.min(60, nights + 1))} aria-label="יותר">+</button></div></div>
+        <div className="stepper"><button onClick={() => setNights(Math.max(1, nights - 1))} aria-label="פחות">−</button><b key={nights} className="tick">{nights}</b><button onClick={() => setNights(Math.min(60, nights + 1))} aria-label="יותר">+</button></div></div>
       <label className="field"><span>מתי</span>
         <select value={month} onChange={e => setMonth(e.target.value)}>{lastMonths().map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}</select></label>
     </div>
     <label className="field"><span>הערה (לא חובה)</span><input value={note} onChange={e => setNote(e.target.value)} placeholder="למשל: כולל ארוחת בוקר, התמקחתי מ-2000" /></label>
     {error && <div className="note warn">{error}</div>}
-    <button className="btn primary block" disabled={busy} onClick={submit}>{busy ? 'שומר…' : 'שמור מחיר'}</button>
+    <div className="form-actions"><button className="btn primary block big" disabled={busy} onClick={submit}>{busy ? <span className="spinner" aria-hidden="true" /> : null}{busy ? 'שומר…' : 'שמור מחיר'}</button></div>
     <p className="muted small center">הדיווח מוצג בלי שם ובלי מייל.</p>
   </section>;
 }
