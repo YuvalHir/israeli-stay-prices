@@ -37,8 +37,11 @@ function GitHubIcon() {
 type Photo = { src: string; page: string; author: string; license: string; licenseUrl?: string; area?: boolean; title?: string };
 function Thumb({ place, size = 'sm', photo }: { place: Pick<Place, 'kind'>; size?: 'sm' | 'lg'; photo?: Photo | null }) {
   const [bad, setBad] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
   useEffect(() => setBad(false), [photo?.src]);
-  if (photo && !bad) return <div className={`thumb ${size} photo`}><img src={photo.src} alt="" loading="lazy" decoding="async" onLoad={e => e.currentTarget.classList.add('in')} onError={() => setBad(true)} />{photo.area && size === 'sm' && <i className="area-tag">אזור</i>}</div>;
+  // Server-rendered images can finish loading before React attaches onLoad; reveal them anyway.
+  useEffect(() => { const i = imgRef.current; if (i?.complete && i.naturalWidth) i.classList.add('in'); }, [photo?.src, bad]);
+  if (photo && !bad) return <div className={`thumb ${size} photo`}><img ref={imgRef} src={photo.src} alt="" loading="lazy" decoding="async" onLoad={e => e.currentTarget.classList.add('in')} onError={() => setBad(true)} />{photo.area && size === 'sm' && <i className="area-tag">אזור</i>}</div>;
   return <div className={`thumb ${size} ph ph-${place.kind}`} aria-hidden="true"><span>{KIND_ICON[place.kind] ?? '🏠'}</span></div>;
 }
 const CUR_SYMBOL: Record<string, string> = { ILS: '₪', USD: '$', EUR: '€', GBP: '£', THB: '฿', INR: '₹', JPY: '¥', VND: '₫' };
