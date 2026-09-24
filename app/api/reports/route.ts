@@ -26,9 +26,9 @@ export async function GET(req: NextRequest) {
   // Prices only for signed-in users with an active search; everyone else sees counts.
   const user = await currentUser();
   const sid = req.nextUrl.searchParams.get('searchId');
-  const canSee = !!user && await searchCovers(DB, user.id, sid);
+  const canSee = !!user && await searchCovers(DB, user.id, sid, null, null, !!user.is_admin);
   const inside = canSee ? new Map<string, boolean>() : null;
-  if (inside) for (const r of results) if (!inside.has(r.place_id)) inside.set(r.place_id, await searchCovers(DB, user!.id, sid, r.lat, r.lon));
+  if (inside) for (const r of results) if (!inside.has(r.place_id)) inside.set(r.place_id, await searchCovers(DB, user!.id, sid, r.lat, r.lon, !!user!.is_admin));
   // Per place: report count and the prices (amount + currency) so the client can show a median in any display currency.
   const counts: Record<string, number> = {}, prices: Record<string, [number, string][]> = {};
   for (const r of results) { counts[r.place_id] = (counts[r.place_id] ?? 0) + 1; if (inside?.get(r.place_id)) (prices[r.place_id] ??= []).push([r.price, r.currency]); }
@@ -60,5 +60,5 @@ export async function POST(req: NextRequest) {
     b.lat ?? null, b.lon ?? null, b.area?.slice(0, 120) ?? null, /^[A-Za-z]{2}$/.test(b.country ?? '') ? b.country!.toUpperCase() : null, price, b.currency, b.room,
     Math.max(1, Math.min(60, Math.round(b.nights ?? 1))), month, b.note?.trim().slice(0, 300) || null,
   ).run();
-  return NextResponse.json({ ok: true, ...(await creditState(DB, user.id)) });
+  return NextResponse.json({ ok: true, ...(await creditState(DB, user.id, !!user.is_admin)) });
 }

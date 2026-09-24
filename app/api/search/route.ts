@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
   const again = await DB.prepare(
     `SELECT id FROM searches WHERE user_id = ? AND created_at >= datetime('now','-1 hour') AND abs(lat - ?) < 0.01 AND abs(lon - ?) < 0.01 ORDER BY created_at DESC LIMIT 1`,
   ).bind(user.id, lat, lon).first<{ id: string }>();
-  if (again) return NextResponse.json({ searchId: again.id, ...(await creditState(DB, user.id)) });
-  const c = await creditState(DB, user.id);
+  if (user.is_admin) return NextResponse.json({ searchId: 'admin', ...(await creditState(DB, user.id, true)) });
+  if (again) return NextResponse.json({ searchId: again.id, ...(await creditState(DB, user.id, !!user.is_admin)) });
+  const c = await creditState(DB, user.id, !!user.is_admin);
   if (c.searchesLeft <= 0) return NextResponse.json({ error: 'report_required', ...c }, { status: 402 });
   const id = crypto.randomUUID();
   await DB.prepare('INSERT INTO searches (id, user_id, lat, lon) VALUES (?, ?, ?, ?)').bind(id, user.id, lat, lon).run();

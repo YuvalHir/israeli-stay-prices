@@ -8,7 +8,7 @@ const GITHUB_URL = 'https://github.com/YuvalHir/israeli-stay-prices';
 const SLOGAN = 'התמקחת? ספר לחבריך';
 type Disp = 'local' | 'USD' | 'ILS';
 
-type Me = { user: { name: string | null; email: string } | null; isAdmin?: boolean; reports?: number; likes?: number; searchesLeft?: number; anonLeft?: number };
+type Me = { user: { name: string | null; email: string } | null; isAdmin?: boolean; reports?: number; likes?: number; searchesLeft?: number; anonLeft?: number; unlimited?: boolean };
 type Report = {
   id: string; place_name: string; price: number; currency: string; country?: string | null; room: 'dorm' | 'private'; nights: number;
   stay_month: string; note: string | null; up?: number; down?: number; my_vote?: number | null; mine_report?: number;
@@ -269,6 +269,7 @@ export default function Home() {
   const shown = onlyKnown ? places.filter(p => counts[p.id]) : places;
   const showLanding = !area && !reporting && !open;
   const gate = !me ? null : !loggedIn ? { t: `${me.anonLeft ?? 3} מתוך 3 צפיות חינם`, ok: (me.anonLeft ?? 3) > 0 }
+    : me.unlimited ? { t: 'אדמין · חיפושים ללא הגבלה', ok: true }
     : searchId ? { t: `המחירים באזור פתוחים · נשארו ${me.searchesLeft ?? 0} חיפושים`, ok: true }
     : { t: 'דווח מחיר או תן 👍 כדי לפתוח 5 חיפושים', ok: false };
 

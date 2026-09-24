@@ -12,14 +12,16 @@ export const SEARCH_TTL_HOURS = 12;
 export const SEARCH_RADIUS_KM = 8;
 export const ANON_COOKIE = 'sp_anon';
 
-export async function creditState(DB: D1Database, userId: string) {
+export async function creditState(DB: D1Database, userId: string, isAdmin = false) {
   const r = await DB.prepare(
     `SELECT (SELECT COUNT(*) FROM reports WHERE user_id = ?1) AS reports,
             (SELECT COUNT(*) FROM report_votes v JOIN reports r ON r.id = v.report_id WHERE v.user_id = ?1 AND v.vote = 1 AND r.user_id <> ?1) AS likes,
             (SELECT COUNT(*) FROM searches WHERE user_id = ?1) AS used`,
   ).bind(userId).first<{ reports: number; likes: number; used: number }>();
   const reports = r?.reports ?? 0, likes = r?.likes ?? 0, used = r?.used ?? 0;
-  return { reports, likes, used, searchesLeft: Math.max(0, SEARCHES_PER_CREDIT * (reports + likes) - used) };
+  // Admins have unlimited searches.
+  if (isAdmin) return { reports, likes, used, searchesLeft: 9999, unlimited: true };
+  return { reports, likes, used, searchesLeft: Math.max(0, SEARCHES_PER_CREDIT * (reports + likes) - used), unlimited: false };
 }
 
 const km = (aLat: number, aLon: number, bLat: number, bLon: number) => {
@@ -29,7 +31,8 @@ const km = (aLat: number, aLon: number, bLat: number, bLon: number) => {
 };
 
 /** True when searchId is this user's, still fresh, and (if a point is given) the point is inside it. */
-export async function searchCovers(DB: D1Database, userId: string, searchId: string | null | undefined, lat?: number | null, lon?: number | null) {
+export async function searchCovers(DB: D1Database, userId: string, searchId: string | null | undefined, lat?: number | null, lon?: number | null, isAdmin = false) {
+  if (isAdmin) return true;
   if (!searchId) return false;
   const s = await DB.prepare(`SELECT lat, lon FROM searches WHERE id = ? AND user_id = ? AND created_at >= datetime('now', ?)`)
     .bind(searchId, userId, `-${SEARCH_TTL_HOURS} hours`).first<{ lat: number; lon: number }>();

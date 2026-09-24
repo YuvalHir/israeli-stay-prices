@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     if (!s?.seen && (s?.views ?? 0) >= ANON_VIEWS) return NextResponse.json({ error: 'login_required' }, { status: 401 });
     if (!s?.seen) await DB.prepare('INSERT OR IGNORE INTO anon_views (anon_id, place_id) VALUES (?, ?)').bind(id, placeId).run();
     anonLeft = Math.max(0, ANON_VIEWS - (s?.views ?? 0) - (s?.seen ? 0 : 1));
-  } else if (!(await searchCovers(DB, user.id, searchId, lat, lon))) {
+  } else if (!(await searchCovers(DB, user.id, searchId, lat, lon, !!user.is_admin))) {
     return NextResponse.json({ error: 'report_required' }, { status: 402 });
   }
 
