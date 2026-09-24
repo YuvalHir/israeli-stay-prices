@@ -374,3 +374,4 @@ body { text-rendering: optimizeLegibility; }
 .toast { cursor: pointer; }
 .toast.out { animation: toastOut .28s var(--ease) forwards; }
 @keyframes toastOut { to { opacity: 0; transform: translate(-50%, 12px) scale(.97); } }
+.toast { width: max-content; max-width: calc(100% - 32px); text-align: center; line-height: 1.4; }
