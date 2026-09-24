@@ -339,6 +339,12 @@ export default function Home() {
             <button className="back" onClick={() => setOpen(null)}>→ חזרה לרשימה</button>
             <Thumb place={open} size="lg" />
             <h1 className="place-title">{open.name}</h1>
+            {Number.isFinite(open.lat) && <div className="maps">
+              <a className="map-btn" href={`https://www.google.com/maps/search/?api=1&query=${open.lat},${open.lon}`} target="_blank" rel="noopener"><b>Google Maps</b><small>פתח מיקום</small></a>
+              <a className="map-btn" href={`https://maps.apple.com/?q=${encodeURIComponent(open.name)}&ll=${open.lat},${open.lon}`} target="_blank" rel="noopener"><b>Apple Maps</b><small>פתח מיקום</small></a>
+              <a className="map-btn nav" href={`https://www.google.com/maps/dir/?api=1&destination=${open.lat},${open.lon}`} target="_blank" rel="noopener"><b>🧭 ניווט</b><small>Google Maps</small></a>
+              <a className="map-btn nav" href={`https://maps.apple.com/?daddr=${open.lat},${open.lon}&q=${encodeURIComponent(open.name)}`} target="_blank" rel="noopener"><b>🧭 ניווט</b><small>Apple Maps</small></a>
+            </div>}
             <div className="chips static">
               <span className="chip">{KIND_ICON[open.kind] ?? '🏠'} {kindLabel(open.kind)}</span>
               {open.distance != null && <span className="chip">📍 {dist(open.distance)}</span>}
