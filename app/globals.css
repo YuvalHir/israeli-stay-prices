@@ -354,3 +354,5 @@ body { text-rendering: optimizeLegibility; }
 .footer { text-align: center; line-height: 1.6; }
 .footer .gh { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); text-decoration: none; font-weight: 600; color: var(--ink); box-shadow: var(--shadow); margin-bottom: 10px; }
 .footer .gh svg { width: 18px; height: 18px; }
+/* Round 7: sticky filter sits on a solid strip so rows never peek through the gap */
+.seg.filter { background: rgba(241,235,226,.96); box-shadow: 0 -12px 0 4px rgba(246,243,238,.96), 0 8px 16px -10px rgba(40,25,10,.18); }
