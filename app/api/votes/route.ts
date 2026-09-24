@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { env } from '@/lib/env';
+import { creditState } from '@/lib/gate';
 
 // vote: 1 = "I paid the same", -1 = "I paid more", 0 = remove my vote.
 export async function POST(req: NextRequest) {
@@ -17,5 +18,5 @@ export async function POST(req: NextRequest) {
     ON CONFLICT(report_id, user_id) DO UPDATE SET vote = excluded.vote, created_at = datetime('now')`).bind(reportId, user.id, vote).run();
   const c = await DB.prepare(`SELECT COALESCE(SUM(vote = 1), 0) AS up, COALESCE(SUM(vote = -1), 0) AS down FROM report_votes WHERE report_id = ?`)
     .bind(reportId).first<{ up: number; down: number }>();
-  return NextResponse.json({ ok: true, up: c?.up ?? 0, down: c?.down ?? 0, mine: vote });
+  return NextResponse.json({ ok: true, up: c?.up ?? 0, down: c?.down ?? 0, mine: vote, ...(await creditState(DB, user.id)) });
 }

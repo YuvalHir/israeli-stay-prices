@@ -211,3 +211,4 @@ p { line-height: 1.55; }
 .disp-select { width: auto; max-width: 118px; padding-inline: 10px; text-overflow: ellipsis; }
 .header nav { gap: 6px; }
 @media (max-width: 420px) { .brand span { display: none; } }
+.badge.locked { background: var(--sand); color: var(--ink2); }

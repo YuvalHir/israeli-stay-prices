@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { countryAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, suggestPlaces, type Area, type Place, type Suggestion } from '@/lib/places';
 import { currencyFor, currencyName, flagOf, FLAG_BY_CURRENCY, formatMoney } from '@/lib/currency';
@@ -8,7 +8,7 @@ const GITHUB_URL = 'https://github.com/YuvalHir/israeli-stay-prices';
 const SLOGAN = 'התמקחת? ספר לחבריך';
 type Disp = 'local' | 'USD' | 'ILS';
 
-type Me = { user: { name: string | null; email: string } | null; isAdmin?: boolean; reports?: number; unlocked?: boolean; viewsLeft?: number };
+type Me = { user: { name: string | null; email: string } | null; isAdmin?: boolean; reports?: number; likes?: number; searchesLeft?: number; anonLeft?: number };
 type Report = {
   id: string; place_name: string; price: number; currency: string; country?: string | null; room: 'dorm' | 'private'; nights: number;
   stay_month: string; note: string | null; up?: number; down?: number; my_vote?: number | null; mine_report?: number;
@@ -55,7 +55,7 @@ function ReportForm({ place, area, country, onDone, onCancel }: { place: Place |
       body: JSON.stringify({ placeId: place?.id, placeName: name, placeKind: place?.kind, lat: place?.lat, lon: place?.lon, area, country, price: p, currency, room, nights, stayMonth: month, note }),
     });
     if (!res.ok) { setBusy(false); return setError(res.status === 401 ? 'צריך להתחבר קודם.' : 'השמירה לא הצליחה. נסה שוב.'); }
-    setBusy(false); onDone('תודה! המחיר נשמר ועכשיו כל המחירים פתוחים בשבילך.');
+    setBusy(false); onDone('תודה! המחיר נשמר, וקיבלת 5 חיפושים עם מחירים.');
   };
   return <section className="card form">
     <div className="form-head"><button className="icon-btn" onClick={onCancel} aria-label="חזרה">→</button><div><h2>כמה שילמת ללילה?</h2><p className="muted small form-sub">{SLOGAN} 😉</p></div></div>
@@ -88,12 +88,17 @@ export default function Home() {
   const [myPos, setMyPos] = useState<{ lat: number; lon: number } | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [searchId, setSearchIdState] = useState<string | null>(null);
+  const searchRef = useRef<string | null>(null);
+  const setSearchId = (v: string | null) => { searchRef.current = v; setSearchIdState(v); };
+  const [loginPop, setLoginPop] = useState(false);
+  const areaRef = useRef<Area | null>(null);
   const [listPrices, setListPrices] = useState<Record<string, [number, string][]>>({});
   const [status, setStatus] = useState<'idle' | 'locating' | 'loading' | 'ready' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState<Place | null>(null);
-  const [openState, setOpenState] = useState<{ loading: boolean; locked?: boolean; reports?: Report[] }>({ loading: false });
+  const [openState, setOpenState] = useState<{ loading: boolean; locked?: boolean; needLogin?: boolean; reports?: Report[] }>({ loading: false });
   const [reporting, setReporting] = useState<Place | 'manual' | null>(null);
   const [toast, setToast] = useState('');
   const [installEvt, setInstallEvt] = useState<any>(null);
@@ -117,11 +122,26 @@ export default function Home() {
   const pickSug = (sg: Suggestion) => { setSugOpen(false); setSearch(''); setSugs([]); loadArea({ name: sg.name, lat: sg.lat, lon: sg.lon, country: sg.country }); };
 
   const say = (m: string) => { setToast(m); setTimeout(() => setToast(t => t === m ? '' : t), 4500); };
-  const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then(setMe).catch(() => setMe({ user: null }));
+  const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then((m: Me) => { setMe(m); return m; }).catch(() => { const m = { user: null }; setMe(m); return m as Me; });
+  const loadListPrices = (list: Place[], sid: string | null) => {
+    if (!list.length) return;
+    fetch(`/api/reports?placeIds=${encodeURIComponent(list.map(p => p.id).join(','))}${sid ? `&searchId=${sid}` : ''}`)
+      .then(r => r.json()).then(j => { setCounts(j.counts ?? {}); setListPrices(j.prices ?? {}); }).catch(() => {});
+  };
+  /** Spend (or reuse) one search with prices for the area. Returns the search id or null. */
+  const startSearch = async (a: Area, m?: Me): Promise<string | null> => {
+    const who = m ?? await refreshMe();
+    if (!who?.user || !(who.searchesLeft ?? 0)) { setSearchId(null); return null; }
+    const r = await fetch('/api/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lat: a.lat, lon: a.lon }) });
+    if (!r.ok) { setSearchId(null); return null; }
+    const j = await r.json();
+    setSearchId(j.searchId); setMe(x => x ? { ...x, searchesLeft: j.searchesLeft } : x);
+    return j.searchId;
+  };
 
   const loadArea = async (a: Area) => {
     if (!a.country) countryAt(a.lat, a.lon).then(c => { if (c) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, country: c } : cur); });
-    setListPrices({}); setArea(a); setOpen(null); setReporting(null); setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
+    setListPrices({}); setSearchId(null); areaRef.current = a; setArea(a); setOpen(null); setReporting(null); setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
     try {
       const [osm, reported] = await Promise.all([
         nearbyStays(a.lat, a.lon).catch(() => [] as Place[]),
@@ -136,8 +156,8 @@ export default function Home() {
       setCounts(Object.fromEntries(reported.map(r => [r.id, r.n])));
       setPlaces(found); setStatus('ready');
       if (!found.length) { setMessage('לא נמצאו מקומות לינה במפה ברדיוס 2 ק״מ. אפשר לדווח ידנית.'); return; }
-      const ids = encodeURIComponent(found.map(p => p.id).join(','));
-      fetch(`/api/reports?placeIds=${ids}`).then(r => r.json()).then(j => { setCounts(j.counts ?? {}); setListPrices(j.prices ?? {}); }).catch(() => {});
+      const sid = await startSearch(a);
+      loadListPrices(found, sid);
     } catch { setStatus('error'); setMessage('החיפוש במפה לא הצליח (אולי אין קליטה). נסה שוב או בחר אזור.'); }
   };
   const locate = (silent = false) => {
@@ -175,29 +195,37 @@ export default function Home() {
   };
   const openPlace = async (p: Place) => {
     setOpen(p);
-    if (!me?.user) { setOpenState({ loading: false }); return; }
     setOpenState({ loading: true });
-    const res = await fetch('/api/views', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ placeId: p.id, placeName: p.name }) });
-    if (res.status === 402) setOpenState({ loading: false, locked: true });
-    else if (res.ok) { const j = await res.json(); setOpenState({ loading: false, reports: j.reports }); refreshMe(); }
+    const res = await fetch('/api/views', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ placeId: p.id, placeName: p.name, lat: p.lat, lon: p.lon, searchId: searchRef.current }) });
+    if (res.status === 401) { setOpenState({ loading: false, needLogin: true }); setLoginPop(true); }
+    else if (res.status === 402) setOpenState({ loading: false, locked: true });
+    else if (res.ok) { const j = await res.json(); setOpenState({ loading: false, reports: j.reports }); if (j.anonLeft != null) setMe(x => x ? { ...x, anonLeft: j.anonLeft } : x); }
     else setOpenState({ loading: false, reports: [] });
   };
   const vote = async (r: Report, v: 1 | -1) => {
     const next = r.my_vote === v ? 0 : v;
     const res = await fetch('/api/votes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reportId: r.id, vote: next }) });
+    if (res.status === 401) return setLoginPop(true);
     if (!res.ok) return say('הדירוג לא נשמר.');
     const j = await res.json();
     setOpenState(s => ({ ...s, reports: s.reports?.map(x => x.id === r.id ? { ...x, up: j.up, down: j.down, my_vote: next || null } : x) }));
+    setMe(x => x ? { ...x, searchesLeft: j.searchesLeft, likes: j.likes } : x);
+    if (next === 1) {
+      say('תודה! לייק נחשב כדיווח: קיבלת 5 חיפושים עם מחירים.');
+      if (!searchRef.current && areaRef.current) { const sid = await startSearch(areaRef.current); loadListPrices(places, sid); }
+    }
+    if (next === -1 && open) { say('שילמת יותר? ספר כמה. הדיווח שלך ייחשב ויפתח 5 חיפושים.'); setReporting(open); }
   };
   const afterReport = async (msg: string) => {
     const p = reporting;
     setReporting(null); say(msg);
-    await refreshMe();
-    if (places.length) fetch(`/api/reports?placeIds=${encodeURIComponent(places.map(x => x.id).join(','))}`).then(r => r.json()).then(j => { setCounts(j.counts ?? {}); setListPrices(j.prices ?? {}); }).catch(() => {});
+    const m = await refreshMe();
+    const sid = areaRef.current ? await startSearch(areaRef.current, m) : null;
+    loadListPrices(places, sid ?? searchRef.current);
     if (p && p !== 'manual') openPlace(p);
     else if (open) openPlace(open);
   };
-  const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); refreshMe(); };
+  const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); setSearchId(null); setListPrices({}); refreshMe(); };
 
   const rs = openState.reports ?? [];
   const viewCountry = open?.country ?? area?.country ?? ipCountry;
@@ -240,7 +268,9 @@ export default function Home() {
   const knownCount = places.filter(p => counts[p.id]).length;
   const shown = onlyKnown ? places.filter(p => counts[p.id]) : places;
   const showLanding = !area && !reporting && !open;
-  const gate = !loggedIn ? null : me?.unlocked ? { t: 'כל המחירים פתוחים', ok: true } : { t: `${me?.viewsLeft ?? 3} מתוך 3 צפיות חינם`, ok: false };
+  const gate = !me ? null : !loggedIn ? { t: `${me.anonLeft ?? 3} מתוך 3 צפיות חינם`, ok: (me.anonLeft ?? 3) > 0 }
+    : searchId ? { t: `המחירים באזור פתוחים · נשארו ${me.searchesLeft ?? 0} חיפושים`, ok: true }
+    : { t: 'דווח מחיר או תן 👍 כדי לפתוח 5 חיפושים', ok: false };
 
   const Header = ({ light = false }: { light?: boolean }) => <header className={`header ${light ? 'light' : ''}`}>
     <button className="brand" onClick={() => { setArea(null); setOpen(null); setReporting(null); setStatus('idle'); }}>
@@ -279,12 +309,21 @@ export default function Home() {
   return <>
     {toast && <div className="toast" role="status">{toast}</div>}
 
+    {loginPop && <div className="sheet-backdrop" role="dialog" aria-modal="true" onClick={() => setLoginPop(false)}>
+      <div className="sheet" onClick={e => e.stopPropagation()}>
+        <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>נגמרו 3 הצפיות החינמיות</h2>
+        <p>התחבר כדי להמשיך. אחרי ההתחברות, כל דיווח על מחיר ששילמת, או 👍 על דיווח של מישהו אחר, פותח לך 5 חיפושים עם מחירים.</p></div>
+        <a className="btn primary block" href="/api/auth/google">התחבר עם Google</a>
+        <button className="btn ghost block" onClick={() => setLoginPop(false)}>אחר כך</button>
+      </div>
+    </div>}
+
     {onboarding && <div className="sheet-backdrop" role="dialog" aria-modal="true">
       <div className="sheet">
         {[
           { i: '👋', t: 'ברוך הבא', b: 'כאן מטיילים ישראלים משתפים כמה באמת שילמו ללילה, בכל מדינה: מלונות, הוסטלים, גסטהאוסים ולודג׳ים. ככה יודעים על מה להתמקח.' },
-          { i: '🗺️', t: 'איך זה עובד', b: 'האפליקציה מוצאת את מקומות הלינה סביבך על המפה. 3 מקומות ראשונים פתוחים לצפייה אחרי התחברות עם Google.' },
-          { i: '🤝', t: 'נותנים ומקבלים', b: 'אחרי 3 צפיות, מדווחים כמה שילמת על לילה אחד, במטבע המקומי, בדולר או בשקל, וכל המחירים נפתחים. אפשר גם לסמן 👍 אם שילמת אותו מחיר או 👎 אם שילמת יותר.' },
+          { i: '🗺️', t: 'איך זה עובד', b: 'האפליקציה מוצאת את מקומות הלינה סביבך על המפה. 3 מקומות ראשונים פתוחים לצפייה, אפילו בלי להתחבר.' },
+          { i: '🤝', t: 'נותנים ומקבלים', b: 'אחר כך מתחברים, וכל דיווח על מחיר ששילמת פותח 5 חיפושים עם מחירים. 👍 על דיווח (שילמתי אותו דבר) נחשב כמו דיווח. 👎 (שילמתי יותר)? ספר כמה, וזה ייחשב.' },
         ].map((s, i) => i === step && <div key={i} className="sheet-step"><div className="sheet-icon">{s.i}</div><h2>{s.t}</h2><p>{s.b}</p></div>)}
         <div className="dots">{[0, 1, 2].map(i => <span key={i} className={i === step ? 'on' : ''} />)}</div>
         {step < 2 ? <button className="btn primary block" onClick={() => setStep(step + 1)}>הבא</button>
@@ -314,7 +353,7 @@ export default function Home() {
           {[
             ['🗺️', 'מוצאים לינה לידך', 'המלונות, ההוסטלים והגסטהאוסים באזור, על מפה, בכל מדינה.'],
             ['💸', 'רואים מה אחרים שילמו', 'מחיר ללילה במטבע המקומי, חדר פרטי או דורם, ומתי. 3 מקומות ראשונים חינם.'],
-            ['🤝', 'מדווחים ופותחים הכל', 'דיווח אחד על מה ששילמת, אנונימי, וכל המחירים פתוחים בשבילך.'],
+            ['🤝', 'מדווחים ופותחים חיפושים', 'כל דיווח (או 👍) פותח 5 חיפושים עם מחירים. אנונימי, בלי שם ובלי מייל.'],
           ].map(([i, t, b], n) => <div key={n} className="step"><div className="step-icon">{i}</div><div><h3>{t}</h3><p>{b}</p></div></div>)}
         </section>
         <section className="card why">
@@ -352,22 +391,22 @@ export default function Home() {
               {(open.country ?? area?.country) && <span className="chip">{flagOf(open.country ?? area?.country)}</span>}
             </div>
 
-            {!loggedIn ? <div className="card cta">
-                <h3>🔒 המחירים פתוחים אחרי התחברות</h3>
-                <p>3 מקומות ראשונים חינם, ואחרי שתדווח מחיר אחד הכל פתוח.</p>
+            {openState.loading ? <div className="card skeleton" />
+            : openState.needLogin ? <div className="card cta">
+                <h3>🔒 נגמרו 3 הצפיות החינמיות</h3>
+                <p>התחבר עם Google, ואז כל דיווח מחיר (או 👍 על דיווח) פותח לך 5 חיפושים עם מחירים.</p>
                 <a className="btn primary block" href="/api/auth/google">התחבר עם Google</a>
               </div>
-            : openState.loading ? <div className="card skeleton" />
             : openState.locked ? <div className="card cta warn">
-                <h3>נגמרו 3 הצפיות החינמיות</h3>
-                <p>דווח כמה שילמת על לילה באחד המקומות שהיית בהם, וכל המחירים ייפתחו. זה לוקח חצי דקה.</p>
+                <h3>🔒 המחירים נעולים</h3>
+                <p>{(me?.searchesLeft ?? 0) > 0 ? 'המקום הזה מחוץ לאזור החיפוש הנוכחי. חפש את האזור שלו כדי לראות מחירים.' : 'כל דיווח על מחיר ששילמת פותח 5 חיפושים עם מחירים (חיפושים, לא מקומות). זה לוקח חצי דקה.'}</p>
                 <button className="btn primary block" onClick={() => setReporting(open)}>שילמתי כאן, אדווח</button>
                 <button className="btn block" onClick={() => setReporting('manual')}>דווח על מקום אחר</button>
               </div>
             : !rs.length ? <div className="card cta">
                 <h3>עדיין אין דיווחים</h3>
                 <p>היית כאן? הדיווח שלך יעזור לבא אחריך.</p>
-                <button className="btn primary block" onClick={() => setReporting(open)}>שילמתי כאן, אדווח</button>
+                <button className="btn primary block" onClick={() => loggedIn ? setReporting(open) : setLoginPop(true)}>שילמתי כאן, אדווח</button>
               </div>
             : <>
                 {summary && <div className="card price-card">
@@ -390,7 +429,7 @@ export default function Home() {
                   </div>
                 </li>; })}</ul>
                 <div className="card cta slogan"><h3>{SLOGAN} 😉</h3><p>שילמת כאן? הדיווח שלך עוזר לבא אחריך.</p>
-                <button className="btn primary block" onClick={() => setReporting(open)}>שילמתי כאן, אדווח</button></div>
+                <button className="btn primary block" onClick={() => loggedIn ? setReporting(open) : setLoginPop(true)}>שילמתי כאן, אדווח</button></div>
               </>}
           </section>
 
@@ -419,7 +458,9 @@ export default function Home() {
               <ul className="places">{shown.map(p => { const n = counts[p.id] ?? 0; return <li key={p.id}><button className="card place" onClick={() => openPlace(p)}>
                 <Thumb place={p} />
                 <span className="place-body"><span className="name">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
-                {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span> : <span className="badge">אין דיווחים</span>}
+                {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span>
+                  : n ? <span className="badge locked price"><b>🔒 ₪••</b><small>{n === 1 ? 'דיווח 1' : `${n} דיווחים`}</small></span>
+                  : <span className="badge">אין דיווחים</span>}
               </button></li>; })}</ul>
             </>}
             <div className="card cta">

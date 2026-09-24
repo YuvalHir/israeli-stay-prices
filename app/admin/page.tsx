@@ -29,7 +29,7 @@ export default function Admin() {
   return <main className="wrap admin">
     <div className="topbar"><a className="brand" href="/">מחיר ללילה · אדמין</a><span className="muted small">{data.me}</span></div>
     <div className="kpis">
-      {[['משתמשים', s.users, `+${s.users7} השבוע`], ['דיווחים', s.reports, `+${s.reports7} השבוע`], ['מקומות עם מחיר', s.places, ''], ['צפיות', s.views, '']].map(([l, v, sub]) =>
+      {[['משתמשים', s.users, `+${s.users7} השבוע`], ['דיווחים', s.reports, `+${s.reports7} השבוע`], ['מקומות עם מחיר', s.places, ''], ['חיפושים', s.views, '']].map(([l, v, sub]) =>
         <div key={l as string} className="kpi"><div className="kv">{v}</div><div className="kl">{l}</div>{sub && <div className="ks">{sub}</div>}</div>)}
     </div>
     {data.byCountry.length > 0 && <p className="muted">{data.byCountry.map(c => `${flagOf(c.country === '?' ? null : c.country)} ${c.n}`).join('  ·  ')}</p>}
@@ -46,9 +46,9 @@ export default function Admin() {
     : <ul className="list">{data.users.map(u => <li key={u.id}><div className="li">
       <span><div className="name">{u.name ?? u.email}{u.is_admin ? ' · אדמין' : ''}</div>
         <div className="detail">{u.email}</div>
-        <div className="detail">{u.reports} דיווחים · {u.views} צפיות · הצטרף {when(u.created_at)}</div></span>
+        <div className="detail">{u.reports} דיווחים · {u.views} חיפושים · הצטרף {when(u.created_at)}</div></span>
       <span className="row" style={{ margin: 0, flexDirection: 'column' }}>
-        <button className="btn small" onClick={() => act({ action: 'resetViews', id: u.id }, 'לאפס את הצפיות החינמיות של המשתמש?')}>אפס צפיות</button>
+        <button className="btn small" onClick={() => act({ action: 'resetViews', id: u.id }, 'להחזיר למשתמש את כל החיפושים שניצל?')}>אפס חיפושים</button>
         {u.email !== data.me && <button className="btn small" onClick={() => act({ action: 'setAdmin', id: u.id, value: !u.is_admin }, u.is_admin ? 'להסיר הרשאת אדמין?' : 'לתת הרשאת אדמין?')}>{u.is_admin ? 'הסר אדמין' : 'הפוך לאדמין'}</button>}
       </span>
     </div></li>)}</ul>}

@@ -5,7 +5,7 @@ Guide for AI coding agents (Claude Code, Codex, Cursor, Copilot, Gemini...) and 
 ## What this is
 "מחיר ללילה" - a Hebrew, RTL, mobile-first PWA where Israeli travellers share what they paid per night for lodging (hotels, hostels, guesthouses, tea houses) anywhere in the world. Places are found by location on a map.
 
-Core rule: a signed-in user can open 3 places for free. After that they must report one price of their own to unlock everything.
+Gate: a visitor can open 3 places per browser session (anon cookie). Then login. A signed-in user earns 5 "searches with prices" per report and per 👍 on someone else's report (👎 prompts a report; only the report counts). Each area search spends one; a search unlocks prices within 8 km for 12 hours. See lib/gate.ts.
 
 ## Stack
 - Next.js 16 (App Router, React 19, TypeScript) running on Cloudflare Workers through `@opennextjs/cloudflare`

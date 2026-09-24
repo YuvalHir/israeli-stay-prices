@@ -8,12 +8,12 @@ export async function GET() {
   const { DB } = await env();
   const [stats, users, reports, byCountry] = await DB.batch([
     DB.prepare(`SELECT (SELECT COUNT(*) FROM users) AS users, (SELECT COUNT(*) FROM reports) AS reports,
-      (SELECT COUNT(*) FROM place_views) AS views, (SELECT COUNT(DISTINCT place_id) FROM reports) AS places,
+      (SELECT COUNT(*) FROM searches) AS views, (SELECT COUNT(DISTINCT place_id) FROM reports) AS places,
       (SELECT COUNT(*) FROM users WHERE created_at >= datetime('now','-7 days')) AS users7,
       (SELECT COUNT(*) FROM reports WHERE created_at >= datetime('now','-7 days')) AS reports7`),
     DB.prepare(`SELECT u.id, u.email, u.name, u.is_admin, u.created_at,
       (SELECT COUNT(*) FROM reports r WHERE r.user_id = u.id) AS reports,
-      (SELECT COUNT(*) FROM place_views v WHERE v.user_id = u.id) AS views
+      (SELECT COUNT(*) FROM searches v WHERE v.user_id = u.id) AS views
       FROM users u ORDER BY u.created_at DESC LIMIT 500`),
     DB.prepare(`SELECT r.id, r.place_name, r.area, r.country, r.price, r.currency, r.room, r.nights, r.stay_month, r.note, r.created_at, u.email,
       (SELECT COUNT(*) FROM report_votes v WHERE v.report_id = r.id AND v.vote = 1) AS up,
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
   if (b.action === 'resetViews' && b.id) {
-    await DB.prepare('DELETE FROM place_views WHERE user_id = ?').bind(b.id).run();
+    await DB.prepare('DELETE FROM searches WHERE user_id = ?').bind(b.id).run();
     return NextResponse.json({ ok: true });
   }
   return NextResponse.json({ error: 'bad_request' }, { status: 400 });
