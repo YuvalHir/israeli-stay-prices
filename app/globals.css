@@ -295,3 +295,20 @@ body { text-rendering: optimizeLegibility; }
 .sleep-list { scrollbar-width: none; } .sleep-list::-webkit-scrollbar { display: none; }
 .place-where { font-size: 15px; }
 .thumb.lg.photo { box-shadow: 0 8px 30px rgba(23,19,15,.12); }
+
+/* Round 3: map, landing reveal, badges */
+.map .leaflet-tile-pane { filter: saturate(.7) contrast(.95) brightness(1.03); }
+.pin-wrap { background: none; border: 0; }
+.pin { display: block; width: 14px; height: 14px; border-radius: 50%; background: #2a241f; border: 2.5px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); transition: transform .2s var(--spring); }
+.pin.known { width: 30px; height: 30px; background: var(--teal); color: #fff; font: 800 13px/25px system-ui, sans-serif; text-align: center; box-shadow: 0 4px 12px rgba(22,128,108,.45); }
+.pin-wrap:hover .pin { transform: scale(1.2); }
+.leaflet-tooltip { border-radius: 10px; border: 0; box-shadow: 0 6px 20px rgba(0,0,0,.15); font-weight: 600; padding: 6px 10px; }
+.leaflet-control-zoom a { border-radius: 10px !important; }
+.leaflet-bar { border: 0 !important; box-shadow: 0 4px 14px rgba(0,0,0,.12) !important; border-radius: 12px !important; overflow: hidden; }
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s var(--ease), transform .6s var(--ease); transition-delay: calc(var(--i, 0) * 80ms); }
+.reveal.in { opacity: 1; transform: none; }
+.badge.empty { background: transparent; border: 1px dashed var(--line); color: var(--ink3); font-weight: 600; }
+.hero-text > * { animation: rise .7s var(--ease) both; }
+.hero-text > :nth-child(2) { animation-delay: .06s; } .hero-text > :nth-child(3) { animation-delay: .12s; } .hero-text > :nth-child(4) { animation-delay: .18s; }
+.hero-text > :nth-child(5) { animation-delay: .24s; } .hero-text > :nth-child(6) { animation-delay: .3s; } .hero-text > :nth-child(7) { animation-delay: .36s; }
+@media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; } }

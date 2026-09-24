@@ -198,6 +198,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const [sugOpen, setSugOpen] = useState(false);
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
   const [scrolled, setScrolled] = useState(false);
+  // Landing sections glide in as they scroll into view.
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin: '0px 0px -8% 0px' });
+    const t = setTimeout(() => document.querySelectorAll('.reveal:not(.in)').forEach(el => io.observe(el)), 50);
+    return () => { clearTimeout(t); io.disconnect(); };
+  });
   useEffect(() => { const f = () => setScrolled(window.scrollY > 8); f(); window.addEventListener('scroll', f, { passive: true }); return () => window.removeEventListener('scroll', f); }, []);
   const [photos, setPhotos] = useState<{ places: Record<string, Photo>; area: Photo[] }>({ places: {}, area: [] });
   const photoFor = (p: Place): Photo | null => {
@@ -559,13 +566,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             ['🗺️', 'מוצאים לינה לידך', 'המלונות, ההוסטלים והגסטהאוסים באזור, על מפה, בכל מדינה.'],
             ['💸', 'רואים מה אחרים שילמו', 'מחיר ללילה במטבע המקומי, חדר פרטי או דורם, ומתי. 3 מקומות ראשונים חינם.'],
             ['🤝', 'מדווחים ופותחים חיפושים', 'כל דיווח (או 👍) פותח 5 חיפושים עם מחירים. אנונימי, בלי שם ובלי מייל.'],
-          ].map(([i, t, b], n) => <div key={n} className="step"><div className="step-icon">{i}</div><div><h3>{t}</h3><p>{b}</p></div></div>)}
+          ].map(([i, t, b], n) => <div key={n} className="step reveal" style={{ ['--i' as any]: n }}><div className="step-icon">{i}</div><div><h3>{t}</h3><p>{b}</p></div></div>)}
         </section>
-        <section className="card why">
+        <section className="card why reveal">
           <h3>למה זה עובד?</h3>
           <p><b>{SLOGAN}.</b> כל ישראלי שמדווח חוסך לבא אחריו כסף ומיקוח. ככל שיותר מדווחים ומדרגים 👍👎, המחירים מדויקים יותר.</p>
         </section>
-        <section className="card oss">
+        <section className="card oss reveal">
           <GitHubIcon />
           <div><h3>פרויקט קוד פתוח</h3><p>הקוד פתוח לכולם. מצאת באג או יש לך רעיון? <a href={GITHUB_URL} target="_blank" rel="noopener">בוא לתרום ב-GitHub</a>.</p></div>
         </section>
@@ -672,7 +679,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 <span className="place-body"><span className="name" dir="auto">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
                 {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span>
                   : n ? <span className="badge locked price"><b>🔒 ₪••</b><small>{n === 1 ? 'דיווח 1' : `${n} דיווחים`}</small></span>
-                  : <span className="badge">אין דיווחים</span>}
+                  : <span className="badge empty">עוד אין מחיר</span>}
               </button></li>; })}</ul>
             </>}
             {status === 'ready' && (photos.area.length > 0 || Object.keys(photos.places).length > 0) && <p className="photo-credit center">📷 תמונות חופשיות מ-Wikimedia Commons. תמונה עם תגית ״אזור״ היא של הסביבה, לא של המקום. קרדיט מלא בדף המקום.</p>}

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Marker, Tooltip, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Place } from '@/lib/places';
 
@@ -23,11 +24,13 @@ export default function StayMap({ center, places, counts, me, onSelect }: {
         <Tooltip>אתה כאן</Tooltip></CircleMarker>}
       {places.map(p => {
         const n = counts[p.id] ?? 0;
-        return <CircleMarker key={p.id} center={[p.lat, p.lon]} radius={n ? 10 : 7}
-          pathOptions={{ color: '#fff', weight: 2, fillColor: n ? '#2f7d6d' : '#1f1a17', fillOpacity: 0.9 }}
-          eventHandlers={{ click: () => onSelect(p) }}>
-          <Tooltip direction="top">{p.name}{n ? ` · ${n} דיווחים` : ''}</Tooltip>
-        </CircleMarker>;
+        // Places with reports get a teal pill with the count; the rest are small quiet dots.
+        const icon = n
+          ? L.divIcon({ className: 'pin-wrap', html: `<span class="pin known">${n}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] })
+          : L.divIcon({ className: 'pin-wrap', html: '<span class="pin"></span>', iconSize: [16, 16], iconAnchor: [8, 8] });
+        return <Marker key={p.id} position={[p.lat, p.lon]} icon={icon} zIndexOffset={n ? 500 : 0} eventHandlers={{ click: () => onSelect(p) }}>
+          <Tooltip direction="top" offset={[0, -10]}>{p.name}{n ? ` · ${n === 1 ? 'דיווח 1' : `${n} דיווחים`}` : ''}</Tooltip>
+        </Marker>;
       })}
     </MapContainer>
   );
