@@ -16,13 +16,16 @@ export async function GET(req: NextRequest) {
     ).bind(lat - dLat, lat + dLat, lon - dLon, lon + dLon).all();
     return NextResponse.json({ places: results });
   }
-  const ids = (req.nextUrl.searchParams.get('placeIds') ?? '').split(',').filter(Boolean).slice(0, 80);
-  if (!ids.length) return NextResponse.json({ counts: {} });
+  const ids = (req.nextUrl.searchParams.get('placeIds') ?? '').split(',').filter(Boolean).slice(0, 100);
+  if (!ids.length) return NextResponse.json({ counts: {}, prices: {} });
   const { DB } = await env();
   const { results } = await DB.prepare(
-    `SELECT place_id, COUNT(*) AS n FROM reports WHERE place_id IN (${ids.map(() => '?').join(',')}) GROUP BY place_id`,
-  ).bind(...ids).all<{ place_id: string; n: number }>();
-  return NextResponse.json({ counts: Object.fromEntries(results.map((r: { place_id: string; n: number }) => [r.place_id, r.n])) });
+    `SELECT place_id, price, currency FROM reports WHERE place_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 2000`,
+  ).bind(...ids).all<{ place_id: string; price: number; currency: string }>();
+  // Per place: report count and the prices (amount + currency) so the client can show a median in any display currency.
+  const counts: Record<string, number> = {}, prices: Record<string, [number, string][]> = {};
+  for (const r of results) { counts[r.place_id] = (counts[r.place_id] ?? 0) + 1; (prices[r.place_id] ??= []).push([r.price, r.currency]); }
+  return NextResponse.json({ counts, prices });
 }
 
 type Body = {

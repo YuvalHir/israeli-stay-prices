@@ -88,6 +88,7 @@ export default function Home() {
   const [myPos, setMyPos] = useState<{ lat: number; lon: number } | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [listPrices, setListPrices] = useState<Record<string, [number, string][]>>({});
   const [status, setStatus] = useState<'idle' | 'locating' | 'loading' | 'ready' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
@@ -120,7 +121,7 @@ export default function Home() {
 
   const loadArea = async (a: Area) => {
     if (!a.country) countryAt(a.lat, a.lon).then(c => { if (c) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, country: c } : cur); });
-    setArea(a); setOpen(null); setReporting(null); setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
+    setListPrices({}); setArea(a); setOpen(null); setReporting(null); setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
     try {
       const [osm, reported] = await Promise.all([
         nearbyStays(a.lat, a.lon).catch(() => [] as Place[]),
@@ -136,7 +137,7 @@ export default function Home() {
       setPlaces(found); setStatus('ready');
       if (!found.length) { setMessage('לא נמצאו מקומות לינה במפה ברדיוס 2 ק״מ. אפשר לדווח ידנית.'); return; }
       const ids = encodeURIComponent(found.map(p => p.id).join(','));
-      fetch(`/api/reports?placeIds=${ids}`).then(r => r.json()).then(j => setCounts(j.counts ?? {})).catch(() => {});
+      fetch(`/api/reports?placeIds=${ids}`).then(r => r.json()).then(j => { setCounts(j.counts ?? {}); setListPrices(j.prices ?? {}); }).catch(() => {});
     } catch { setStatus('error'); setMessage('החיפוש במפה לא הצליח (אולי אין קליטה). נסה שוב או בחר אזור.'); }
   };
   const locate = (silent = false) => {
@@ -192,7 +193,8 @@ export default function Home() {
     const p = reporting;
     setReporting(null); say(msg);
     await refreshMe();
-    if (p && p !== 'manual') { setCounts(c => ({ ...c, [p.id]: (c[p.id] ?? 0) + 1 })); openPlace(p); }
+    if (places.length) fetch(`/api/reports?placeIds=${encodeURIComponent(places.map(x => x.id).join(','))}`).then(r => r.json()).then(j => { setCounts(j.counts ?? {}); setListPrices(j.prices ?? {}); }).catch(() => {});
+    if (p && p !== 'manual') openPlace(p);
     else if (open) openPlace(open);
   };
   const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); refreshMe(); };
@@ -221,11 +223,18 @@ export default function Home() {
     const prices = top.map(r => r.price);
     return { cur: top[0].currency, med: median(prices), min: Math.min(...prices), max: Math.max(...prices), n: top.length };
   })();
-  const DispSwitch = <div className="seg disp" role="group" aria-label="מטבע להצגה">
-    {(['local', 'USD', 'ILS'] as const).map(d => <button key={d} className={disp === d ? 'on' : ''} onClick={() => chooseDisp(d)}>
-      {d === 'local' ? `${flagOf(viewCountry)} ${localCur === 'USD' || localCur === 'ILS' ? localCur : 'מקומי'}` : d === 'USD' ? '🇺🇸 דולר' : '🇮🇱 שקל'}
-    </button>)}
-  </div>;
+  const DispSwitch = <select className="chip disp-select" value={disp} onChange={e => chooseDisp(e.target.value as Disp)} aria-label="מטבע להצגה">
+    <option value="local">{flagOf(viewCountry)} {localCur === 'USD' || localCur === 'ILS' ? localCur : `מקומי (${localCur})`}</option>
+    <option value="USD">🇺🇸 דולר</option>
+    <option value="ILS">🇮🇱 שקל</option>
+  </select>;
+  const listMedian = (id: string): string | null => {
+    const ps = listPrices[id];
+    if (!ps?.length) return null;
+    const conv2 = ps.map(([p, c]) => conv(p, c));
+    if (conv2.every(v => v != null)) { const m = median(conv2 as number[]); return money(m >= 100 ? Math.round(m) : Math.round(m * 100) / 100, dispCur); }
+    const c0 = ps[0][1]; return money(median(ps.filter(x => x[1] === c0).map(x => x[0])), c0);
+  };
   const reportCountry = (reporting && reporting !== 'manual' ? reporting.country : null) ?? open?.country ?? area?.country ?? ipCountry;
   const loggedIn = !!me?.user;
   const knownCount = places.filter(p => counts[p.id]).length;
@@ -239,6 +248,7 @@ export default function Home() {
     </button>
     <nav>
       {installEvt && <button className="chip" onClick={() => { installEvt.prompt(); setInstallEvt(null); }}>התקן</button>}
+      {DispSwitch}
       {me?.isAdmin && <a className="chip" href="/admin">אדמין</a>}
       {loggedIn ? <button className="avatar" onClick={logout} title={`התנתק (${me?.user?.email})`}>{(me?.user?.name ?? me?.user?.email ?? '?').trim()[0]}</button>
         : <a className="chip strong" href="/api/auth/google">התחברות</a>}
@@ -353,7 +363,6 @@ export default function Home() {
                 <button className="btn primary block" onClick={() => setReporting(open)}>שילמתי כאן, אדווח</button>
               </div>
             : <>
-                {DispSwitch}
                 {summary && <div className="card price-card">
                   <span className="muted small">חציון ללילה</span>
                   <div className="big-price">{curFlag(summary.cur, viewCountry)} {money(summary.med, summary.cur)}</div>
@@ -389,7 +398,7 @@ export default function Home() {
                 <button className="icon-btn" onClick={() => setPicker(!picker)} aria-label="שנה אזור">🔎</button>
               </div>
             </div>
-            <div className="area-tools">{gate && <div className={`gate ${gate.ok ? 'ok' : ''}`}>{gate.ok ? '🔓' : '🎟️'} {gate.t}</div>}{DispSwitch}</div>
+            {gate && <div className={`gate ${gate.ok ? 'ok' : ''}`}>{gate.ok ? '🔓' : '🎟️'} {gate.t}</div>}
             {picker && <div className="card">{Picker}</div>}
             {area && <StayMap center={area} places={places} counts={counts} me={myPos} onSelect={openPlace} />}
             {message && <p className="muted">{message}</p>}
@@ -403,7 +412,7 @@ export default function Home() {
               <ul className="places">{shown.map(p => { const n = counts[p.id] ?? 0; return <li key={p.id}><button className="card place" onClick={() => openPlace(p)}>
                 <Thumb place={p} />
                 <span className="place-body"><span className="name">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
-                <span className={`badge ${n ? 'known' : ''}`}>{n ? (n === 1 ? 'דיווח 1' : `${n} דיווחים`) : 'אין עדיין'}</span>
+                {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span> : <span className="badge">אין דיווחים</span>}
               </button></li>; })}</ul>
             </>}
             <div className="card cta">
