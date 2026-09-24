@@ -23,6 +23,12 @@ export const viewport: Viewport = { themeColor: '#f6f3ee', width: 'device-width'
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="he" dir="rtl" className={heebo.className}>
+      <head>
+        <link rel="preconnect" href="https://tile.openstreetmap.org" crossOrigin="" />
+        <link rel="preconnect" href="https://photon.komoot.io" crossOrigin="" />
+        <link rel="dns-prefetch" href="https://thumb.wikimedia.org" />
+        <link rel="dns-prefetch" href="https://upload.wikimedia.org" />
+      </head>
       <body>{children}</body>
     </html>
   );

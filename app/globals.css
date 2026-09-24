@@ -342,3 +342,15 @@ body { text-rendering: optimizeLegibility; }
 .nf { min-height: 80vh; display: flex; flex-direction: column; justify-content: center; text-align: center; animation: rise .5s var(--ease) both; }
 .nf-icon { font-size: 64px; margin-bottom: 12px; animation: iconIn .6s var(--spring) both; }
 .nf h1 { margin-bottom: 8px; }
+
+/* Round 6: sticky filter, calmer cards, footer */
+.seg.filter { position: sticky; top: calc(58px + env(safe-area-inset-top)); z-index: 400; background: rgba(241,235,226,.9); backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); }
+.cta { text-align: center; padding: 20px 18px; }
+.cta h3 { font-size: 19px; }
+.cta.warn { background: linear-gradient(180deg, #fff6f2, var(--coral-soft)); }
+.cta.slogan { background: linear-gradient(160deg, #17130f, #3a2a20); color: #fff; border: 0; }
+.cta.slogan p { color: rgba(255,255,255,.8); }
+.cta.slogan .btn.primary { background: #fff; color: var(--ink); border-color: #fff; }
+.footer { text-align: center; line-height: 1.6; }
+.footer .gh { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); text-decoration: none; font-weight: 600; color: var(--ink); box-shadow: var(--shadow); margin-bottom: 10px; }
+.footer .gh svg { width: 18px; height: 18px; }
