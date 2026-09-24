@@ -1,0 +1,1 @@
+Follow the project guide in /AGENTS.md: Next.js 16 on Cloudflare Workers (OpenNext) with D1, Hebrew RTL mobile-first UI, no paid services, never expose reporter identity, add a new migration for every schema change, and run `npx next build` before proposing changes.

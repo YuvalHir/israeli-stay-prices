@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "israeli-stay-prices",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "stay-prices",
+      // Fill in after: npx wrangler d1 create stay-prices
+      "database_id": "f6e84594-5969-4ed2-b10d-f100bbc07cce",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "GOOGLE_CLIENT_ID": "735783155997-4sjga78glpmapvk9ulk1pjcl2re43ljn.apps.googleusercontent.com",
+    "APP_URL": "https://israeli-stay-prices.hyuval1511.workers.dev"
+  }
+  // Secret (not in git): npx wrangler secret put GOOGLE_CLIENT_SECRET
+}
