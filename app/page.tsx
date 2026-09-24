@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { countryAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, type Area, type Place } from '@/lib/places';
+import { countryAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, suggestPlaces, type Area, type Place, type Suggestion } from '@/lib/places';
 import { currencyFor, currencyName, flagOf, FLAG_BY_CURRENCY, formatMoney } from '@/lib/currency';
 
 const GITHUB_URL = 'https://github.com/YuvalHir/israeli-stay-prices';
@@ -103,6 +103,17 @@ export default function Home() {
   const [ipCountry, setIpCountry] = useState<string | null>(null);
   const [rates, setRates] = useState<Record<string, number> | null>(null);
   const [disp, setDisp] = useState<Disp>('local');
+  const [sugs, setSugs] = useState<Suggestion[]>([]);
+  const [sugOpen, setSugOpen] = useState(false);
+
+  useEffect(() => {
+    const q = search.trim();
+    if (q.length < 2) { setSugs([]); return; }
+    const ctl = new AbortController();
+    const t = setTimeout(() => { suggestPlaces(q, area ?? myPos, ctl.signal).then(r => { if (!ctl.signal.aborted) setSugs(r); }); }, 250);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [search]);
+  const pickSug = (sg: Suggestion) => { setSugOpen(false); setSearch(''); setSugs([]); loadArea({ name: sg.name, lat: sg.lat, lon: sg.lon, country: sg.country }); };
 
   const say = (m: string) => { setToast(m); setTimeout(() => setToast(t => t === m ? '' : t), 4500); };
   const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then(setMe).catch(() => setMe({ user: null }));
@@ -236,8 +247,14 @@ export default function Home() {
 
   const Picker = <div className="picker">
     <div className="searchrow">
-      <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') doSearch(); }} placeholder="חפש עיר, כפר או שכונה" aria-label="חיפוש אזור" />
-      <button className="btn primary" onClick={doSearch}>חפש</button>
+      <div className="ac">
+        <input value={search} onChange={e => { setSearch(e.target.value); setSugOpen(true); }} onFocus={() => setSugOpen(true)} onBlur={() => setTimeout(() => setSugOpen(false), 150)}
+          onKeyDown={e => { if (e.key === 'Enter') { if (sugs[0]) pickSug(sugs[0]); else doSearch(); } }} placeholder="חפש עיר, כפר או שכונה בעולם" aria-label="חיפוש אזור" autoComplete="off" role="combobox" aria-expanded={sugOpen && sugs.length > 0} />
+        {sugOpen && sugs.length > 0 && <ul className="ac-list" role="listbox">{sugs.map((sg, i) => <li key={i} role="option" aria-selected={false}>
+          <button onMouseDown={e => e.preventDefault()} onClick={() => pickSug(sg)}><span className="ac-flag">{flagOf(sg.country)}</span><span><b>{sg.name}</b>{sg.sub && <small>{sg.sub}</small>}</span></button>
+        </li>)}</ul>}
+      </div>
+      <button className="btn primary" onClick={() => sugs[0] ? pickSug(sugs[0]) : doSearch()}>חפש</button>
     </div>
     <div className="chips">{QUICK_AREAS.map(a => <button key={a.name} className="chip" onClick={() => loadArea(a)}>{flagOf(a.country)} {a.name}</button>)}</div>
   </div>;
