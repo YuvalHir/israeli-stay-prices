@@ -327,7 +327,14 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     else if (!seen) setOnboarding(true); else locate(true);
     return () => { window.removeEventListener('beforeinstallprompt', h); window.removeEventListener('appinstalled', onInstalled); if (a2hsTimer) clearTimeout(a2hsTimer); };
   }, []);
-  useEffect(() => { if (open || reporting) window.scrollTo({ top: 0 }); }, [open, reporting]);
+  // Remember where the list was scrolled, so closing a place lands back on the same row (like iOS back).
+  const openRef = useRef<InitialPlace | null>(null);
+  const listY = useRef(0);
+  useEffect(() => {
+    const wasOpen = openRef.current; openRef.current = open;
+    if (open || reporting) { window.scrollTo({ top: 0 }); return; }
+    if (wasOpen && listY.current > 0) { const y = listY.current; requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: y }))); }
+  }, [open, reporting]);
 
   const finishOnboarding = () => { try { localStorage.setItem('sp_onboarded', '1'); } catch {} setOnboarding(false); locate(); };
   const doSearch = async () => {
@@ -338,6 +345,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   };
   const pushedRef = useRef(false);
   const openPlace = async (p: InitialPlace, push = true) => {
+    if (!openRef.current && typeof window !== 'undefined') listY.current = window.scrollY;
     setOpen(p);
     if (typeof window !== 'undefined') {
       const path = placePath(p);
