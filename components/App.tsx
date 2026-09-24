@@ -46,8 +46,23 @@ function Thumb({ place, size = 'sm', photo }: { place: Pick<Place, 'kind'>; size
 }
 const CUR_SYMBOL: Record<string, string> = { ILS: '₪', USD: '$', EUR: '€', GBP: '£', THB: '฿', INR: '₹', JPY: '¥', VND: '₫' };
 /** Number big, currency small, always left-to-right so "500 NPR" never flips in RTL. */
-function PriceTag({ amount, cur, approx = false }: { amount: number; cur: string; approx?: boolean }) {
-  const n = amount.toLocaleString('en-US', { maximumFractionDigits: amount % 1 ? 2 : 0 });
+/** Rolls a number up to its value (ease-out), like the Apple Wallet/Health totals. Instant with reduced motion. */
+function useCountUp(target: number, on: boolean) {
+  const [v, setV] = useState(on ? 0 : target);
+  const from = useRef(on ? 0 : target);
+  useEffect(() => {
+    if (!on || (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)) { setV(target); from.current = target; return; }
+    const a = from.current, t0 = performance.now(), dur = 750; let raf = 0;
+    const tick = (t: number) => { const k = Math.min(1, (t - t0) / dur); const e = 1 - Math.pow(1 - k, 4); setV(a + (target - a) * e); if (k < 1) raf = requestAnimationFrame(tick); else from.current = target; };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); };
+  }, [target, on]);
+  return v;
+}
+function PriceTag({ amount, cur, approx = false, roll = false }: { amount: number; cur: string; approx?: boolean; roll?: boolean }) {
+  const shown = useCountUp(amount, roll);
+  const val = roll && shown !== amount ? (amount % 1 ? Math.round(shown * 100) / 100 : Math.round(shown)) : amount;
+  const n = val.toLocaleString('en-US', { maximumFractionDigits: amount % 1 ? 2 : 0 });
   const sym = CUR_SYMBOL[cur];
   return <span className="pt" dir="ltr">{approx && <i>≈</i>}{sym && <small className="sym">{sym}</small>}<span className="num">{n}</span>{!sym && <small className="code">{cur}</small>}</span>;
 }
@@ -685,7 +700,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             : <>
                 {summary && <div className="card price-card">
                   <span className="muted small">חציון ללילה</span>
-                  <div className="big-price"><PriceTag amount={summary.med} cur={summary.cur} /></div>
+                  <div className="big-price"><PriceTag amount={summary.med} cur={summary.cur} roll /></div>
                   <div className="muted small">{summary.cur !== dispCur ? 'אין שער המרה כרגע · ' : ''}{summary.n === 1 ? 'דיווח אחד' : `${summary.n} דיווחים`}{summary.n > 1 ? ` · טווח ${money(summary.min, summary.cur)} – ${money(summary.max, summary.cur)}` : ''}</div>
                 </div>}
                 <ul className="reports">{rs.map(r => { const c = conv(r.price, r.currency); const same = r.currency === dispCur || c == null; return <li key={r.id} className="card report">

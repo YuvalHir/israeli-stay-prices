@@ -375,3 +375,5 @@ body { text-rendering: optimizeLegibility; }
 .toast.out { animation: toastOut .28s var(--ease) forwards; }
 @keyframes toastOut { to { opacity: 0; transform: translate(-50%, 12px) scale(.97); } }
 .toast { width: max-content; max-width: calc(100% - 32px); text-align: center; line-height: 1.4; }
+/* Round 12: the median price rolls up; tabular digits keep it from jittering */
+.big-price .num { font-variant-numeric: tabular-nums; }
