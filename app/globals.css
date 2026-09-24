@@ -275,3 +275,23 @@ body { text-rendering: optimizeLegibility; }
 .place .name, .sleep-opt .name { unicode-bidi: plaintext; text-align: right; }
 .gate { transition: background-color .3s var(--ease); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+
+/* Round 2: prices, detail, header */
+.pt { display: inline-flex; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums; unicode-bidi: isolate; }
+.pt i { font-style: normal; opacity: .6; margin-inline-end: 2px; }
+.pt .code, .pt .sym { font-size: .5em; font-weight: 700; color: var(--ink2); letter-spacing: .02em; }
+.pt .sym { font-size: .7em; }
+.big-price { font-size: 44px; font-weight: 800; letter-spacing: -1px; line-height: 1.1; margin: 4px 0; }
+.price-card { text-align: center; padding: 20px 16px; background: linear-gradient(180deg, #fff, #fbf8f4); }
+.report-price { font-size: 20px; display: inline-flex; align-items: baseline; gap: 6px; }
+.report { transition: box-shadow .2s var(--ease); }
+.vote.on { animation: pop .35s var(--spring); }
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.08); } 100% { transform: scale(1); } }
+.detail-skel { display: grid; gap: 10px; margin-top: 8px; }
+.detail-skel .skeleton { border-radius: var(--r); min-height: 0; }
+.sk-price { height: 120px; } .sk-row { height: 86px; }
+.header { transition: box-shadow .25s var(--ease), background-color .25s var(--ease); }
+.header.scrolled { box-shadow: 0 1px 0 rgba(23,19,15,.06), 0 8px 24px rgba(23,19,15,.06); }
+.sleep-list { scrollbar-width: none; } .sleep-list::-webkit-scrollbar { display: none; }
+.place-where { font-size: 15px; }
+.thumb.lg.photo { box-shadow: 0 8px 30px rgba(23,19,15,.12); }

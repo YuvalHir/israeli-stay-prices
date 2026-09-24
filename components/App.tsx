@@ -41,6 +41,13 @@ function Thumb({ place, size = 'sm', photo }: { place: Pick<Place, 'kind'>; size
   if (photo && !bad) return <div className={`thumb ${size} photo`}><img src={photo.src} alt="" loading="lazy" decoding="async" onLoad={e => e.currentTarget.classList.add('in')} onError={() => setBad(true)} />{photo.area && size === 'sm' && <i className="area-tag">אזור</i>}</div>;
   return <div className={`thumb ${size} ph ph-${place.kind}`} aria-hidden="true"><span>{KIND_ICON[place.kind] ?? '🏠'}</span></div>;
 }
+const CUR_SYMBOL: Record<string, string> = { ILS: '₪', USD: '$', EUR: '€', GBP: '£', THB: '฿', INR: '₹', JPY: '¥', VND: '₫' };
+/** Number big, currency small, always left-to-right so "500 NPR" never flips in RTL. */
+function PriceTag({ amount, cur, approx = false }: { amount: number; cur: string; approx?: boolean }) {
+  const n = amount.toLocaleString('en-US', { maximumFractionDigits: amount % 1 ? 2 : 0 });
+  const sym = CUR_SYMBOL[cur];
+  return <span className="pt" dir="ltr">{approx && <i>≈</i>}{sym && <small className="sym">{sym}</small>}<span className="num">{n}</span>{!sym && <small className="code">{cur}</small>}</span>;
+}
 function PhotoCredit({ photo }: { photo: Photo }) {
   return <p className="photo-credit">📷 {photo.area ? <>תמונה של האזור{photo.title ? ` (${photo.title})` : ''}, לא של המקום עצמו · </> : null}
     <bdi><a href={photo.page} target="_blank" rel="noopener">{photo.author}</a></bdi> · {photo.licenseUrl ? <a href={photo.licenseUrl} target="_blank" rel="noopener"><bdi>{photo.license}</bdi></a> : <bdi>{photo.license}</bdi>} · Wikimedia Commons</p>;
@@ -190,6 +197,8 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const [sugs, setSugs] = useState<Suggestion[]>([]);
   const [sugOpen, setSugOpen] = useState(false);
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => { const f = () => setScrolled(window.scrollY > 8); f(); window.addEventListener('scroll', f, { passive: true }); return () => window.removeEventListener('scroll', f); }, []);
   const [photos, setPhotos] = useState<{ places: Record<string, Photo>; area: Photo[] }>({ places: {}, area: [] });
   const photoFor = (p: Place): Photo | null => {
     const own = photos.places[p.id]; if (own) return own;
@@ -443,7 +452,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     : searchId ? { t: `המחירים באזור פתוחים · נשארו ${me.searchesLeft ?? 0} חיפושים`, ok: true }
     : { t: 'דווח מחיר או תן 👍 כדי לפתוח 5 חיפושים', ok: false };
 
-  const Header = ({ light = false }: { light?: boolean }) => <header className={`header ${light ? 'light' : ''}`}>
+  const Header = ({ light = false }: { light?: boolean }) => <header className={`header ${light ? 'light' : ''} ${scrolled && !light ? 'scrolled' : ''}`}>
     <button className="brand" onClick={() => { setArea(null); setOpen(null); setReporting(null); setStatus('idle'); }}>
       <img src="/icons/icon-192.png" alt="" /><span>מחיר ללילה</span>
     </button>
@@ -578,7 +587,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             <Thumb place={open} size="lg" photo={photos.places[open.id] ?? open.photo ?? photoFor(open)} />
             {(photos.places[open.id] ?? open.photo ?? photoFor(open)) && <PhotoCredit photo={(photos.places[open.id] ?? open.photo ?? photoFor(open))!} />}
             <h1 className="place-title" dir="auto">{open.name}</h1>
-            {(open.locality || open.country) && <p className="muted place-where">{kindLabel(open.kind)}{open.locality ? ` ב-${open.locality}` : ''}{open.country ? ` ${flagOf(open.country)}` : ''}{open.reports ? ` · ${open.reports === 1 ? 'דיווח מחיר 1' : `${open.reports} דיווחי מחיר`}` : ''}</p>}
+            {(open.locality || open.country) && <p className="muted place-where">{KIND_ICON[open.kind] ?? '🏠'} {kindLabel(open.kind)}{open.locality ? ` ב-${open.locality}` : ''}{open.country ? ` ${flagOf(open.country)}` : ''}{open.distance != null ? ` · ${dist(open.distance)}` : ''}{open.reports ? ` · ${open.reports === 1 ? 'דיווח מחיר 1' : `${open.reports} דיווחי מחיר`}` : ''}</p>}
             {Number.isFinite(open.lat) && <div className="maps">
               {[
                 { name: 'Google Maps', domain: 'maps.google.com', href: `https://www.google.com/maps/dir/?api=1&destination=${open.lat},${open.lon}` },
@@ -591,13 +600,9 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 </a>
               ))}
             </div>}
-            <div className="chips static">
-              <span className="chip">{KIND_ICON[open.kind] ?? '🏠'} {kindLabel(open.kind)}</span>
-              {open.distance != null && <span className="chip">📍 {dist(open.distance)}</span>}
-              {(open.country ?? area?.country) && <span className="chip">{flagOf(open.country ?? area?.country)}</span>}
-            </div>
+            {!(open.locality || open.country) && <p className="muted place-where">{KIND_ICON[open.kind] ?? '🏠'} {kindLabel(open.kind)}{open.distance != null ? ` · ${dist(open.distance)} ממך` : ''}{(open.country ?? area?.country) ? ` ${flagOf(open.country ?? area?.country)}` : ''}</p>}
 
-            {openState.loading ? <div className="card skeleton" />
+            {openState.loading ? <div className="detail-skel"><div className="skeleton sk-price" /><div className="skeleton sk-row" /><div className="skeleton sk-row" /></div>
             : openState.needLogin ? <div className="card cta">
                 <h3>🔒 נגמרו 3 הצפיות החינמיות</h3>
                 <p>התחבר עם Google, ואז כל דיווח מחיר (או 👍 על דיווח) פותח לך 5 חיפושים עם מחירים.</p>
@@ -617,12 +622,12 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             : <>
                 {summary && <div className="card price-card">
                   <span className="muted small">חציון ללילה</span>
-                  <div className="big-price">{curFlag(summary.cur, viewCountry)} {money(summary.med, summary.cur)}</div>
+                  <div className="big-price"><PriceTag amount={summary.med} cur={summary.cur} /></div>
                   <div className="muted small">{summary.cur !== dispCur ? 'אין שער המרה כרגע · ' : ''}{summary.n === 1 ? 'דיווח אחד' : `${summary.n} דיווחים`}{summary.n > 1 ? ` · טווח ${money(summary.min, summary.cur)} – ${money(summary.max, summary.cur)}` : ''}</div>
                 </div>}
                 <ul className="reports">{rs.map(r => { const c = conv(r.price, r.currency); const same = r.currency === dispCur || c == null; return <li key={r.id} className="card report">
                   <div className="report-top">
-                    <b>{same ? `${curFlag(r.currency, r.country)} ${money(r.price, r.currency)}` : `${curFlag(dispCur, viewCountry)} ≈${money(c!, dispCur)}`} <span className="muted small">ללילה</span></b>
+                    <b className="report-price">{same ? <PriceTag amount={r.price} cur={r.currency} /> : <PriceTag amount={c!} cur={dispCur} approx />} <span className="muted small">ללילה</span></b>
                     <span className="muted small">{monthLabel(r.stay_month)}</span>
                   </div>
                   <div className="muted small">{ROOM_HE[r.room]}{r.nights > 1 ? ` · ${r.nights} לילות` : ''}{!same ? ` · שולם ${money(r.price, r.currency)}` : ''}</div>
