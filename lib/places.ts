@@ -1,5 +1,5 @@
 export type Place = { id: string; name: string; kind: string; lat: number; lon: number; distance?: number; country?: string };
-export type Area = { name: string; lat: number; lon: number; country?: string };
+export type Area = { name: string; lat: number; lon: number; country?: string; label?: string };
 
 const OVERPASS = ['https://overpass-api.de/api/interpreter'];
 
@@ -61,6 +61,15 @@ async function overpassNearby(lat: number, lon: number, radius: number): Promise
         } catch (err) { lastError = err; }
     }
     throw lastError ?? new Error('lookup failed');
+}
+
+/** Human name of the town/village at a point (for "near you" headers). */
+export async function localityAt(lat: number, lon: number): Promise<{ name: string; country?: string } | null> {
+    try {
+        const r = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}&limit=1&lang=en&layer=city&layer=district&layer=locality`);
+        if (r.ok) { const j = await r.json(); const pr = j.features?.[0]?.properties; const name = pr?.name || pr?.city || pr?.district; if (name) return { name, country: pr.countrycode?.toUpperCase() }; }
+    } catch { /* ignore */ }
+    return null;
 }
 
 /** Country code (e.g. "NP") at a point, from OpenStreetMap. */

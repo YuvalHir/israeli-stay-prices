@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { countryAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, suggestPlaces, type Area, type Place, type Suggestion } from '@/lib/places';
+import { countryAt, localityAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, suggestPlaces, type Area, type Place, type Suggestion } from '@/lib/places';
 import { currencyFor, currencyName, flagOf, FLAG_BY_CURRENCY, formatMoney } from '@/lib/currency';
 import { drawShareCard, shareText, type ShareInfo } from '@/lib/shareCard';
 import { placePath, SITE_URL } from '@/lib/placeUrl';
@@ -38,7 +38,7 @@ type Photo = { src: string; page: string; author: string; license: string; licen
 function Thumb({ place, size = 'sm', photo }: { place: Pick<Place, 'kind'>; size?: 'sm' | 'lg'; photo?: Photo | null }) {
   const [bad, setBad] = useState(false);
   useEffect(() => setBad(false), [photo?.src]);
-  if (photo && !bad) return <div className={`thumb ${size} photo`}><img src={photo.src} alt="" loading="lazy" decoding="async" onError={() => setBad(true)} />{photo.area && size === 'sm' && <i className="area-tag">אזור</i>}</div>;
+  if (photo && !bad) return <div className={`thumb ${size} photo`}><img src={photo.src} alt="" loading="lazy" decoding="async" onLoad={e => e.currentTarget.classList.add('in')} onError={() => setBad(true)} />{photo.area && size === 'sm' && <i className="area-tag">אזור</i>}</div>;
   return <div className={`thumb ${size} ph ph-${place.kind}`} aria-hidden="true"><span>{KIND_ICON[place.kind] ?? '🏠'}</span></div>;
 }
 function PhotoCredit({ photo }: { photo: Photo }) {
@@ -244,7 +244,9 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     return j.searchId;
   };
 
+  const GENERIC = ['המיקום שלך', 'האזור ששותף'];
   const loadArea = async (a: Area, keepOpen = false) => {
+    if (GENERIC.includes(a.name)) localityAt(a.lat, a.lon).then(l => { if (l) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, label: l.name, country: cur.country ?? l.country } : cur); });
     if (!a.country) countryAt(a.lat, a.lon).then(c => { if (c) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, country: c } : cur); });
     setListPrices({}); setSearchId(null); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
     try {
@@ -420,9 +422,9 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     return { cur: top[0].currency, med: median(prices), min: Math.min(...prices), max: Math.max(...prices), n: top.length };
   })();
   const DispSwitch = <select className="chip disp-select" value={disp} onChange={e => chooseDisp(e.target.value as Disp)} aria-label="מטבע להצגה">
-    <option value="local">{flagOf(viewCountry)} {localCur === 'USD' || localCur === 'ILS' ? localCur : `מקומי (${localCur})`}</option>
-    <option value="USD">🇺🇸 דולר</option>
-    <option value="ILS">🇮🇱 שקל</option>
+    <option value="local">{flagOf(viewCountry)} {localCur}</option>
+    {localCur !== 'USD' && <option value="USD">🇺🇸 USD</option>}
+    {localCur !== 'ILS' && <option value="ILS">🇮🇱 ₪ ILS</option>}
   </select>;
   const listMedian = (id: string): string | null => {
     const ps = listPrices[id];
@@ -503,7 +505,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         {sleepPick.status === 'ready' && <ul className="sleep-list">{sleepPick.places.map((p, i) => <li key={p.id}>
           <button className={`sleep-opt ${i === 0 ? 'first' : ''}`} onClick={() => { setSleepPick(null); setOpen(null); setReporting(p); }}>
             <span className="sleep-kind">{KIND_ICON[p.kind] ?? '🏠'}</span>
-            <span className="place-body"><span className="name">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
+            <span className="place-body"><span className="name" dir="auto">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
             {i === 0 && <span className="badge known">הכי קרוב</span>}
           </button></li>)}</ul>}
         {sleepPick.status !== 'locating' && <button className="btn block" onClick={() => { setSleepPick(null); setOpen(null); setReporting('manual'); }}>המקום שלי לא ברשימה</button>}
@@ -575,7 +577,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             </div>
             <Thumb place={open} size="lg" photo={photos.places[open.id] ?? open.photo ?? photoFor(open)} />
             {(photos.places[open.id] ?? open.photo ?? photoFor(open)) && <PhotoCredit photo={(photos.places[open.id] ?? open.photo ?? photoFor(open))!} />}
-            <h1 className="place-title">{open.name}</h1>
+            <h1 className="place-title" dir="auto">{open.name}</h1>
             {(open.locality || open.country) && <p className="muted place-where">{kindLabel(open.kind)}{open.locality ? ` ב-${open.locality}` : ''}{open.country ? ` ${flagOf(open.country)}` : ''}{open.reports ? ` · ${open.reports === 1 ? 'דיווח מחיר 1' : `${open.reports} דיווחי מחיר`}` : ''}</p>}
             {Number.isFinite(open.lat) && <div className="maps">
               {[
@@ -640,8 +642,8 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         : <>
             <div className="area-head">
               <div>
-                <p className="muted small">מקומות לינה</p>
-                <h1>{area?.country ? flagOf(area.country) + ' ' : ''}{area?.name === 'המיקום שלך' ? 'לידך' : area?.name}</h1>
+                <p className="muted small">{area?.name === 'המיקום שלך' ? 'מקומות לינה לידך' : 'מקומות לינה'}</p>
+                <h1 className="area-title">{area?.country && <span className="flag">{flagOf(area.country)}</span>}<bdi>{area?.label ?? (area?.name === 'המיקום שלך' ? 'לידך' : area?.name === 'האזור ששותף' ? 'האזור' : area?.name)}</bdi></h1>
               </div>
               <div className="row">
                 <button className="icon-btn" onClick={() => locate()} aria-label="המיקום שלי">📍</button>
@@ -660,9 +662,9 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 <button className={onlyKnown ? 'on' : ''} onClick={() => setOnlyKnown(true)}>עם מחירים ({knownCount})</button>
               </div>
               {onlyKnown && !knownCount && <p className="muted center">עוד אין מחירים באזור. תהיה הראשון לדווח!</p>}
-              <ul className="places">{shown.map(p => { const n = counts[p.id] ?? 0; return <li key={p.id}><button className="card place" onClick={() => openPlace(p)}>
+              <ul className="places">{shown.map((p, i) => { const n = counts[p.id] ?? 0; return <li key={p.id} style={{ ['--i' as any]: Math.min(i, 12) }}><button className="card place" onClick={() => openPlace(p)}>
                 <Thumb place={p} photo={photoFor(p)} />
-                <span className="place-body"><span className="name">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
+                <span className="place-body"><span className="name" dir="auto">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
                 {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span>
                   : n ? <span className="badge locked price"><b>🔒 ₪••</b><small>{n === 1 ? 'דיווח 1' : `${n} דיווחים`}</small></span>
                   : <span className="badge">אין דיווחים</span>}
