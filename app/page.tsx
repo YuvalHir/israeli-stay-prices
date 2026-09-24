@@ -110,6 +110,39 @@ function ShareSheet({ info, onClose }: { info: ShareInfo; onClose: () => void })
   </div>;
 }
 
+/** Add-to-home-screen offer: native prompt on Android/Chrome, instructions on iOS. Shown at a good moment, never when installed. */
+const A2HS_KEY = 'sp_a2hs';
+type A2hsState = { dismissed: number; last: number; installed?: boolean };
+const readA2hs = (): A2hsState => { try { return { dismissed: 0, last: 0, ...JSON.parse(localStorage.getItem(A2HS_KEY) ?? '{}') }; } catch { return { dismissed: 0, last: 0 }; } };
+const writeA2hs = (v: A2hsState) => { try { localStorage.setItem(A2HS_KEY, JSON.stringify(v)); } catch {} };
+const isStandalone = () => typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true);
+const isIOS = () => typeof navigator !== 'undefined' && (/iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+const canOfferA2hs = () => { const st = readA2hs(); return !isStandalone() && !st.installed && st.dismissed < 3 && Date.now() - st.last > 14 * 864e5; };
+
+function ShareGlyph() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-4px' }}><path d="M12 3v12" /><path d="m8 7 4-4 4 4" /><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1" /></svg>;
+}
+
+function InstallSheet({ ios, onInstall, onClose }: { ios: boolean; onInstall: () => void; onClose: () => void }) {
+  const safari = ios && !/CriOS|FxiOS|EdgiOS|GSA\//.test(navigator.userAgent);
+  return <div className="sheet-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="sheet" onClick={e => e.stopPropagation()}>
+      <div className="sheet-step">
+        <img className="a2hs-icon" src="/icons/icon-192.png" alt="" />
+        <h2>שים את מחיר ללילה במסך הבית</h2>
+        <p>נפתח בלחיצה כמו אפליקציה, במסך מלא, בלי לחפש את הלינק. בלי חנות ובלי הורדה.</p>
+      </div>
+      {ios ? <ol className="a2hs-steps">
+        <li><span>1</span><div>לוחצים על כפתור השיתוף <b className="a2hs-glyph"><ShareGlyph /></b> {safari ? 'בסרגל של ספארי' : 'בדפדפן (בכרום הוא ליד שורת הכתובת)'}</div></li>
+        <li><span>2</span><div>גוללים ובוחרים <b>״הוספה למסך הבית״</b> <b className="a2hs-glyph">⊞</b></div></li>
+        <li><span>3</span><div>לוחצים <b>״הוספה״</b> למעלה, וזהו</div></li>
+      </ol>
+      : <button className="btn primary block big" onClick={onInstall}>📲 הוסף למסך הבית</button>}
+      <button className="btn ghost block" onClick={onClose}>{ios ? 'הבנתי' : 'לא עכשיו'}</button>
+    </div>
+  </div>;
+}
+
 function WhatsAppIcon() {
   return <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z"/></svg>;
 }
@@ -134,6 +167,7 @@ export default function Home() {
   const [reporting, setReporting] = useState<Place | 'manual' | null>(null);
   const [toast, setToast] = useState('');
   const [installEvt, setInstallEvt] = useState<any>(null);
+  const installEvtRef = useRef<any>(null);
   const [onboarding, setOnboarding] = useState(false);
   const [step, setStep] = useState(0);
   const [picker, setPicker] = useState(false);
@@ -144,6 +178,23 @@ export default function Home() {
   const [sugs, setSugs] = useState<Suggestion[]>([]);
   const [sugOpen, setSugOpen] = useState(false);
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
+  const [a2hs, setA2hs] = useState<null | 'native' | 'ios'>(null);
+  const [ios, setIos] = useState(false);
+  const [installed, setInstalled] = useState(true);
+  const offerInstall = (force = false) => {
+    if (isStandalone()) return;
+    if (!force && !canOfferA2hs()) return;
+    if (installEvtRef.current) setA2hs('native'); else if (isIOS()) setA2hs('ios');
+  };
+  const closeA2hs = () => { const st = readA2hs(); writeA2hs({ ...st, dismissed: st.dismissed + 1, last: Date.now() }); setA2hs(null); };
+  const doInstall = async () => {
+    const e = installEvtRef.current; setA2hs(null);
+    if (!e) return;
+    e.prompt();
+    const r = await e.userChoice.catch(() => null);
+    installEvtRef.current = null; setInstallEvt(null);
+    if (r?.outcome === 'accepted') { writeA2hs({ ...readA2hs(), installed: true }); setInstalled(true); } else closeA2hs();
+  };
   const [loginWhy, setLoginWhy] = useState<'views' | 'report'>('views');
   const [sleepPick, setSleepPick] = useState<{ status: 'locating' | 'ready' | 'error'; places: Place[]; msg?: string } | null>(null);
 
@@ -210,8 +261,14 @@ export default function Home() {
     try { const d = localStorage.getItem('sp_disp'); if (d === 'USD' || d === 'ILS' || d === 'local') setDisp(d); } catch {}
     fetch('/api/geo').then(r => r.json()).then(j => setIpCountry(j.country ?? null)).catch(() => {});
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-    const h = (e: Event) => { e.preventDefault(); setInstallEvt(e); };
+    const h = (e: Event) => { e.preventDefault(); installEvtRef.current = e; setInstallEvt(e); };
     window.addEventListener('beforeinstallprompt', h);
+    const onInstalled = () => { writeA2hs({ ...readA2hs(), installed: true }); setInstalled(true); setA2hs(null); installEvtRef.current = null; setInstallEvt(null); };
+    window.addEventListener('appinstalled', onInstalled);
+    setIos(isIOS()); setInstalled(isStandalone());
+    let visits = 0; try { visits = Number(localStorage.getItem('sp_visits') ?? 0) + 1; localStorage.setItem('sp_visits', String(visits)); } catch {}
+    // Good moment #1: a returning visitor, after they've had a few seconds with the app.
+    const a2hsTimer = visits >= 2 ? setTimeout(() => offerInstall(), 25000) : null;
     const at = new URLSearchParams(location.search).get('at')?.split(',').map(Number);
     const lp = new URLSearchParams(location.search).get('login');
     if (lp === 'failed') say('ההתחברות עם Google לא הצליחה. נסה שוב.');
@@ -219,7 +276,7 @@ export default function Home() {
     let seen = false; try { seen = localStorage.getItem('sp_onboarded') === '1'; } catch {}
     if (at && at.length === 2 && at.every(Number.isFinite)) { history.replaceState(null, '', '/'); if (!seen) { try { localStorage.setItem('sp_onboarded', '1'); } catch {} } loadArea({ name: 'האזור ששותף', lat: at[0], lon: at[1] }); }
     else if (!seen) setOnboarding(true); else locate(true);
-    return () => window.removeEventListener('beforeinstallprompt', h);
+    return () => { window.removeEventListener('beforeinstallprompt', h); window.removeEventListener('appinstalled', onInstalled); if (a2hsTimer) clearTimeout(a2hsTimer); };
   }, []);
   useEffect(() => { if (open || reporting) window.scrollTo({ top: 0 }); }, [open, reporting]);
 
@@ -330,7 +387,7 @@ export default function Home() {
       <img src="/icons/icon-192.png" alt="" /><span>מחיר ללילה</span>
     </button>
     <nav>
-      {installEvt && <button className="chip" onClick={() => { installEvt.prompt(); setInstallEvt(null); }}>התקן</button>}
+      {!installed && (installEvt || ios) && <button className="chip" onClick={() => offerInstall(true)}>📲 התקן</button>}
       {DispSwitch}
       {me?.isAdmin && <a className="chip" href="/admin">אדמין</a>}
       {loggedIn ? <button className="avatar" onClick={logout} title={`התנתק (${me?.user?.email})`}>{(me?.user?.name ?? me?.user?.email ?? '?').trim()[0]}</button>
@@ -372,7 +429,8 @@ export default function Home() {
       </div>
     </div>}
 
-    {shareInfo && <ShareSheet info={shareInfo} onClose={() => setShareInfo(null)} />}
+    {shareInfo && <ShareSheet info={shareInfo} onClose={() => { setShareInfo(null); setTimeout(() => offerInstall(), 600); }} />}
+    {a2hs && !shareInfo && !onboarding && !loginPop && !sleepPick && <InstallSheet ios={a2hs === 'ios'} onInstall={doInstall} onClose={closeA2hs} />}
 
     {sleepPick && <div className="sheet-backdrop" role="dialog" aria-modal="true" onClick={() => setSleepPick(null)}>
       <div className="sheet" onClick={e => e.stopPropagation()}>

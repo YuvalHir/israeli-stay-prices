@@ -226,3 +226,10 @@ p { line-height: 1.55; }
 .share-preview img { height: 100%; width: auto; max-width: 100%; object-fit: contain; display: block; }
 .share-skel { width: 100%; height: 100%; }
 .btn.wa { background: #25d366; color: #fff; border-color: #25d366; }
+
+/* Add to home screen */
+.a2hs-icon { width: 72px; height: 72px; border-radius: 18px; box-shadow: var(--shadow); margin-bottom: 14px; display: block; }
+.a2hs-steps { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 10px; }
+.a2hs-steps li { display: flex; gap: 12px; align-items: center; background: var(--sand); border-radius: 16px; padding: 12px 14px; font-size: 16px; line-height: 1.5; }
+.a2hs-steps li > span { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 15px; }
+.a2hs-glyph { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 4px; border-radius: 8px; background: #fff; color: #0a84ff; border: 1px solid var(--line); font-weight: 700; vertical-align: middle; }
