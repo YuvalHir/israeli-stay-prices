@@ -1,3 +1,4 @@
+import { countEvent } from '@/lib/events';
 import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { env } from '@/lib/env';
@@ -63,5 +64,6 @@ export async function POST(req: NextRequest) {
     b.lat ?? null, b.lon ?? null, b.area?.slice(0, 120) ?? null, /^[A-Za-z]{2}$/.test(b.country ?? '') ? b.country!.toUpperCase() : null, price, b.currency, b.room,
     Math.max(1, Math.min(60, Math.round(b.nights ?? 1))), month, b.note?.trim().slice(0, 300) || null,
   ).run();
+  await countEvent(DB, 'report_sent');
   return NextResponse.json({ ok: true, ...(await creditState(DB, user.id, !!user.is_admin)) });
 }

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Heebo } from 'next/font/google';
 import './globals.css';
+import Beacon from '@/components/Beacon';
 
 // Variable font (one file per script); only Hebrew is preloaded so it doesn't compete with the app on weak signal.
 const heebo = Heebo({ subsets: ['hebrew'], display: 'swap', adjustFontFallback: true });
@@ -31,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="dns-prefetch" href="https://thumb.wikimedia.org" />
         <link rel="dns-prefetch" href="https://upload.wikimedia.org" />
       </head>
-      <body>{children}</body>
+      <body>{children}<Beacon /></body>
     </html>
   );
 }

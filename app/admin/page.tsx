@@ -2,12 +2,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { flagOf, formatMoney } from '@/lib/currency';
 import { placePath } from '@/lib/placeUrl';
+import { EVENTS, type EventName } from '@/lib/events';
 
 type U = { id: string; email: string; name: string | null; is_admin: number; banned: number; created_at: string; reports: number; reports24: number; views: number; votes: number; last_seen: string | null };
 type R = { id: string; user_id: string; place_id: string; place_name: string; area: string | null; country: string | null; price: number; currency: string; room: string; nights: number; stay_month: string; note: string | null; created_at: string; hidden: number; email: string; banned: number; up: number; down: number };
 type V = { report_id: string; user_id: string; vote: number; created_at: string; email: string; place_name: string; price: number; currency: string; author_id: string };
 type Day = { day: string; reports: number; users: number; views: number; votes: number };
-type Data = { me: string; meId: string; stats: Record<string, number>; users: U[]; reports: R[]; byCountry: { country: string; n: number }[]; daily: Day[]; votes: V[]; topPlaces: { place_id: string; name: string; country: string | null; n: number }[] };
+type Data = { me: string; meId: string; stats: Record<string, number>; users: U[]; reports: R[]; byCountry: { country: string; n: number }[]; daily: Day[]; votes: V[]; topPlaces: { place_id: string; name: string; country: string | null; n: number }[]; events?: { day: string; name: string; n: number }[] };
 type Flag = { k: string; t: string };
 
 const toDate = (s: string) => new Date(s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
@@ -89,6 +90,25 @@ function Chart({ daily }: { daily: Day[] }) {
   </section>;
 }
 
+/** Anonymous action counters: 7-day total, change vs the week before, and a 30-day trend per action. */
+function Events({ rows, days }: { rows: { day: string; name: string; n: number }[]; days: string[] }) {
+  const by = new Map<string, Map<string, number>>();
+  for (const r of rows) { if (!by.has(r.name)) by.set(r.name, new Map()); by.get(r.name)!.set(r.day, r.n); }
+  const list = (Object.keys(EVENTS) as EventName[]).map(k => {
+    const vals = days.map(d => by.get(k)?.get(d) ?? 0);
+    const w = vals.slice(-7).reduce((a, b) => a + b, 0), prev = vals.slice(-14, -7).reduce((a, b) => a + b, 0);
+    return { k, vals, w, prev, total: vals.reduce((a, b) => a + b, 0) };
+  }).sort((a, b) => b.w - a.w || b.total - a.total);
+  return <section className="adm-card"><h2>פעולות באתר</h2><p className="muted small">ספירה אנונימית ליום, בלי משתמש ובלי IP. 7 ימים אחרונים מול השבוע שלפני.</p>
+    <ul className="adm-events">{list.map(x => <li key={x.k}>
+      <span className="ev-name">{EVENTS[x.k]}</span>
+      <b className="ev-n">{x.w.toLocaleString('en-US')}</b>
+      <span className={`ev-d ${x.w > x.prev ? 'up' : x.w < x.prev ? 'down' : ''}`}>{x.prev || x.w ? (x.w >= x.prev ? '▲' : '▼') + ' ' + Math.abs(x.w - x.prev) : '–'}</span>
+      <Spark values={x.vals} />
+    </li>)}</ul>
+  </section>;
+}
+
 function toCsv(rows: R[]) {
   const head = ['created_at', 'place', 'country', 'area', 'price', 'currency', 'room', 'nights', 'month', 'up', 'down', 'hidden', 'email', 'note'];
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -154,6 +174,7 @@ export default function Admin() {
     </div>
 
     <Chart daily={data.daily} />
+    <Events rows={data.events ?? []} days={data.daily.map(d => d.day)} />
 
     <div className="adm-grid">
       <section className="adm-card"><h2>לפי מדינה</h2>

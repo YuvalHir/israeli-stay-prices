@@ -1,3 +1,4 @@
+import { countEvent } from '@/lib/events';
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { createSession, SESSION_COOKIE } from '@/lib/auth';
@@ -31,10 +32,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${e.APP_URL}/?login=failed`);
   }
 
+  const isNew = !(await e.DB.prepare('SELECT 1 FROM users WHERE id = ?').bind(payload.sub).first());
   await e.DB.prepare(
     `INSERT INTO users (id, email, name) VALUES (?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET email = excluded.email, name = excluded.name`,
   ).bind(payload.sub, payload.email, payload.name ?? null).run();
+  if (isNew) await countEvent(e.DB, 'signup');
 
   const admins = (e.ADMIN_EMAILS ?? '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
   if (admins.includes(payload.email.toLowerCase())) {

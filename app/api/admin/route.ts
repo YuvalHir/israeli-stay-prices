@@ -7,7 +7,7 @@ export async function GET() {
   const admin = await currentAdmin();
   if (!admin) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   const { DB } = await env();
-  const [stats, users, reports, byCountry, daily, votes, topPlaces] = await DB.batch([
+  const [stats, users, reports, byCountry, daily, votes, topPlaces, events] = await DB.batch([
     DB.prepare(`SELECT (SELECT COUNT(*) FROM users) AS users, (SELECT COUNT(*) FROM reports) AS reports,
       (SELECT COUNT(*) FROM searches) AS views, (SELECT COUNT(DISTINCT place_id) FROM reports WHERE hidden = 0) AS places,
       (SELECT COUNT(*) FROM report_votes) AS votes, (SELECT COUNT(*) FROM reports WHERE hidden = 1) AS hidden,
@@ -38,9 +38,10 @@ export async function GET() {
     DB.prepare(`SELECT v.report_id, v.user_id, v.vote, v.created_at, u.email, r.place_name, r.price, r.currency, r.user_id AS author_id
       FROM report_votes v JOIN users u ON u.id = v.user_id JOIN reports r ON r.id = v.report_id ORDER BY v.created_at DESC LIMIT 1000`),
     DB.prepare(`SELECT place_id, MAX(place_name) AS name, MAX(country) AS country, COUNT(*) AS n FROM reports WHERE hidden = 0 GROUP BY place_id ORDER BY n DESC LIMIT 10`),
+    DB.prepare(`SELECT day, name, n FROM event_counts WHERE day >= date('now','-29 days') ORDER BY day`),
   ]);
   return NextResponse.json({ me: admin.email, meId: admin.id, stats: stats.results[0], users: users.results, reports: reports.results,
-    byCountry: byCountry.results, daily: daily.results, votes: votes.results, topPlaces: topPlaces.results });
+    byCountry: byCountry.results, daily: daily.results, votes: votes.results, topPlaces: topPlaces.results, events: events.results });
 }
 
 type Body = { action: string; id?: string; ids?: string[]; value?: boolean; userId?: string };

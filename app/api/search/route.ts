@@ -1,3 +1,4 @@
+import { countEvent } from '@/lib/events';
 import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { env } from '@/lib/env';
@@ -20,5 +21,6 @@ export async function POST(req: NextRequest) {
   if (c.searchesLeft <= 0) return NextResponse.json({ error: 'report_required', ...c }, { status: 402 });
   const id = crypto.randomUUID();
   await DB.prepare('INSERT INTO searches (id, user_id, lat, lon) VALUES (?, ?, ?, ?)').bind(id, user.id, lat, lon).run();
+  await countEvent(DB, 'unlock');
   return NextResponse.json({ searchId: id, ...c, used: c.used + 1, searchesLeft: c.searchesLeft - 1 });
 }

@@ -1,6 +1,7 @@
 'use client';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { track } from '@/lib/track';
 import { countryAt, localityAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, suggestPlaces, type Area, type Place, type Suggestion } from '@/lib/places';
 import { currencyFor, currencyName, flagOf, FLAG_BY_CURRENCY, formatMoney } from '@/lib/currency';
 import { drawShareCard, shareText, type ShareInfo } from '@/lib/shareCard';
@@ -136,6 +137,7 @@ function ShareSheet({ info, onClose }: { info: ShareInfo; onClose: () => void })
   const file = blob ? new File([blob], 'mechir-lalayla.png', { type: 'image/png' }) : null;
   const canShareFile = !!file && typeof navigator !== 'undefined' && !!navigator.canShare?.({ files: [file] });
   const share = async () => {
+    track('share');
     if (canShareFile && file) { try { await navigator.share({ files: [file], text }); return; } catch (e: any) { if (e?.name === 'AbortError') return; } }
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   };
@@ -298,9 +300,11 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     e.prompt();
     const r = await e.userChoice.catch(() => null);
     installEvtRef.current = null; setInstallEvt(null);
-    if (r?.outcome === 'accepted') { writeA2hs({ ...readA2hs(), installed: true }); setInstalled(true); } else closeA2hs();
+    if (r?.outcome === 'accepted') { track('install'); writeA2hs({ ...readA2hs(), installed: true }); setInstalled(true); } else closeA2hs();
   };
   const [loginWhy, setLoginWhy] = useState<'views' | 'report'>('views');
+  useEffect(() => { if (reporting) track('report_open'); }, [!!reporting]);
+  useEffect(() => { if (loginPop) track('login_open'); }, [loginPop]);
   const [sleepPick, setSleepPick] = useState<{ status: 'locating' | 'ready' | 'error'; places: Place[]; msg?: string } | null>(null);
 
   // Autocomplete: debounce, cancel the previous request, and drop any answer that isn't for the current text.
@@ -340,6 +344,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     return () => { clearTimeout(first); document.removeEventListener('visibilitychange', onVis); };
   }, []);
   const pickSug = async (sg: Suggestion) => {
+    track('search_pick');
     setSugOpen(false); setSearch(''); setSugs([]);
     if (sg.type === 'stay' && sg.placeId) {
       // A specific stay: load its surroundings for the list/map, then open the place itself.
@@ -379,6 +384,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
 
   const GENERIC = ['המיקום שלך', 'האזור ששותף'];
   const loadArea = async (a: Area, keepOpen = false) => {
+    track('area_view');
     if (GENERIC.includes(a.name)) localityAt(a.lat, a.lon).then(l => { if (l) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, label: l.name, country: cur.country ?? l.country } : cur); });
     if (!a.country) countryAt(a.lat, a.lon).then(c => { if (c) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, country: c } : cur); });
     setListPrices({}); setSearchId(null); setPricesLoading(true); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
@@ -460,6 +466,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   };
   const pushedRef = useRef(false);
   const openPlace = async (p: InitialPlace, push = true) => {
+    if (push) track('place_view');
     if (!openRef.current && typeof window !== 'undefined') listY.current = window.scrollY;
     setOpen(p);
     if (typeof window !== 'undefined') {
@@ -481,6 +488,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const sharePlace = async (p: InitialPlace) => {
     const url = SITE_URL + placePath(p);
     const text = `${p.name}${p.locality ? `, ${p.locality}` : ''} ${p.country ? flagOf(p.country) : ''}\nכמה ישראלים שילמו כאן ללילה? 👀`;
+    track('share');
     if (navigator.share) { try { await navigator.share({ title: p.name, text, url }); return; } catch (e: any) { if (e?.name === 'AbortError') return; } }
     try { await navigator.clipboard.writeText(url); say('הקישור הועתק. אפשר להדביק בוואטסאפ 👍'); }
     catch { window.open(`https://wa.me/?text=${encodeURIComponent(text + '\n' + url)}`, '_blank', 'noopener'); }
@@ -526,6 +534,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   };
   /** "I'm sleeping here now": fresh GPS -> nearest stays -> pick -> short report form. */
   const sleepHere = () => {
+    track('sleep_tap');
     if (!me?.user) { setLoginWhy('report'); setLoginPop(true); return; }
     if (!navigator.geolocation) { setReporting('manual'); return; }
     setSleepPick({ status: 'locating', places: [] });

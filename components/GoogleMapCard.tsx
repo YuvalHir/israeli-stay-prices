@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { track } from '@/lib/track';
 
 // Keyless classic Google Maps embed (Yuval's choice, 25 Sep 2026): no API key, no billing.
 // The pin uses coordinates: name searches can land on the wrong place when Google doesn't know the lodge.
@@ -37,7 +38,7 @@ export default function GoogleMapCard({ name, lat, lon, locality }: { name: stri
     return () => clearTimeout(t);
   }, [show, loaded]);
 
-  if (failed || typeof IntersectionObserver === 'undefined') return <a className="card gmap-row" href={link} target="_blank" rel="noopener">
+  if (failed || typeof IntersectionObserver === 'undefined') return <a className="card gmap-row" href={link} target="_blank" rel="noopener" onClick={() => track('gmap_open')}>
     <span className="gmap-pin" aria-hidden="true">📍</span>
     <span className="gmap-txt"><b>פתח בגוגל מפות</b><span className="muted small">תמונות, ביקורות ומסלול</span></span>
     <span aria-hidden="true">↗</span>
@@ -54,6 +55,6 @@ export default function GoogleMapCard({ name, lat, lon, locality }: { name: stri
         {slow && <button className="btn small" onClick={() => { setSlow(false); setShow(true); }}>טען מפה בכל זאת</button>}
       </div>}
     </div>
-    <a className="btn block" href={link} target="_blank" rel="noopener">פתח בגוגל מפות ↗</a>
+    <a className="btn block" href={link} target="_blank" rel="noopener" onClick={() => track('gmap_open')}>פתח בגוגל מפות ↗</a>
   </section>;
 }
