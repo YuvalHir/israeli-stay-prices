@@ -133,6 +133,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   useEffect(() => { const sync = () => syncPendingReports().then(r => { if (r.sent) say(`${r.sent} דיווחים מהאופליין עלו לאתר.`); }).catch(() => {}); window.addEventListener('online', sync); if (navigator.onLine) sync(); return () => window.removeEventListener('online', sync); }, []);
   const [ipCountry, setIpCountry] = useState<string | null>(null);
   const [rates, setRates] = useState<Record<string, number> | null>(null);
+  const [rateUpdated, setRateUpdated] = useState<string | null>(null);
   const [disp, setDisp] = useState<Disp>('local');
   const [sugs, setSugs] = useState<Suggestion[]>([]);
   const [sugOpen, setSugOpen] = useState(false);
@@ -300,7 +301,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
 
   useEffect(() => {
     refreshMe();
-    fetch('/api/rates').then(r => r.ok ? r.json() : null).then(j => j?.rates && setRates(j.rates)).catch(() => {});
+    fetch('/api/rates').then(r => r.ok ? r.json() : null).then(j => { if (j?.rates && Number.isFinite(Date.parse(j.updated)) && Date.now() - Date.parse(j.updated) < 36 * 3600e3 && Date.parse(j.updated) <= Date.now() + 3600e3) { setRates(j.rates); setRateUpdated(j.updated); } }).catch(() => {});
     try { const d = localStorage.getItem('sp_disp'); if (d === 'USD' || d === 'ILS' || d === 'local') setDisp(d); } catch {}
     fetch('/api/geo').then(r => r.json()).then(j => setIpCountry(j.country ?? null)).catch(() => {});
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
@@ -457,6 +458,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     const v = price / rates[from] * rates[dispCur];
     return v >= 100 ? Math.round(v) : Math.round(v * 100) / 100;
   };
+  const ilsApprox = (amount: number, cur: string) => cur === 'NPR' && rateUpdated && rates?.NPR && rates?.ILS && rates.NPR > 0 ? money(Math.round(amount / rates.NPR * rates.ILS * 100) / 100, 'ILS') : null;
   const chooseDisp = (d: Disp) => { setDisp(d); try { localStorage.setItem('sp_disp', d); } catch {} };
   const summary = (() => {
     const paid = filteredReports.filter(r => !r.israeli_deal);
@@ -723,6 +725,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 {summary && new Set(filteredReports.map(r => r.room)).size === 1 && <div className="card price-card">
                   <span className="muted small">חציון ללילה · {filteredReports[0]?.room === 'dorm' ? 'למיטה בדורם' : 'לכל החדר*'}</span>
                   <div className="big-price"><PriceTag amount={summary.med} cur={summary.cur} roll /></div>
+                  {summary.cur === 'NPR' && ilsApprox(summary.med, summary.cur) && <p className="ils-conversion muted small"><span>≈ <bdi>{ilsApprox(summary.med, summary.cur)}</bdi> ללילה</span><span>שער יומי: {new Date(rateUpdated!).toLocaleDateString('he-IL', { timeZone: 'UTC' })}</span><a href="https://www.exchangerate-api.com" target="_blank" rel="noopener">Exchange Rate API</a></p>}
                   <div className="summary-meta muted small"><span>מחירים חדשים שוקלים יותר</span><span>{summary.n === 1 ? 'דיווח אחד' : `${summary.n} דיווחים`}</span>{summary.n > 1 && <span>טווח: <bdi>{money(summary.min, summary.cur)} – {money(summary.max, summary.cur)}</bdi></span>}{summary.cur !== dispCur && <span>אין שער המרה כרגע</span>}</div>
                 </div>}
                 {summary && new Set(filteredReports.map(r => r.room)).size > 1 && <p className="muted small">יש כאן מחירים לחדרים ולמיטות בדורם. מוצגים הדיווחים בנפרד כדי לא לערבב ביניהם.</p>}
@@ -731,6 +734,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                     <b className="report-price">{r.israeli_deal ? 'לינה חינם*' : same ? <PriceTag amount={r.price} cur={r.currency} /> : <PriceTag amount={c!} cur={dispCur} approx />} <span className="muted small">{r.room === 'private' ? 'ללילה*' : 'למיטה ללילה'}</span></b>
                     <span className="muted small report-age"><span>שהייה: {monthLabel(r.stay_month)}</span><span>{freshnessLabel(r.created_at ? reportAgeDays(r.created_at, null) : null)}</span></span>
                   </div>
+                  {same && r.currency === 'NPR' && ilsApprox(r.price, r.currency) && <p className="ils-conversion muted small"><span>≈ <bdi>{ilsApprox(r.price, r.currency)}</bdi></span><span>שער {new Date(rateUpdated!).toLocaleDateString('he-IL', { timeZone: 'UTC' })}</span><a href="https://www.exchangerate-api.com" target="_blank" rel="noopener">מקור השער</a></p>}
                   {r.room === 'private' && <div className="muted small per-person-note"><span>* מחיר ללילה לכל החדר</span>{r.beds && !r.israeli_deal && <><span>לאדם: <bdi>{money(Math.round(r.price / r.beds * 100) / 100, r.currency)}</bdi></span><span>בחדר מלא: {r.beds} מיטות</span></>}</div>}
                   <div className="muted small">{ROOM_HE[r.room]}{r.beds ? ` · ${r.beds} מיטות בחדר` : ''}{r.israeli_deal ? ' · הדיל הישראלי' : ''}{r.nights > 1 ? ` · ${r.nights} לילות` : ''}{!same && !r.israeli_deal ? ` · שולם ${money(r.price, r.currency)}` : ''}</div>
                   {!!r.israeli_deal && <p className="muted small deal-caption">* הלינה בחינם בתנאי שאוכלים בוקר וערב בלודג׳. הארוחות בתשלום.</p>}
