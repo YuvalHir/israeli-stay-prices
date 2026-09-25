@@ -38,7 +38,7 @@ export async function drawShareCard(s: ShareInfo): Promise<Blob> {
   try { await (document as any).fonts?.ready; } catch {}
   const flag = s.country ? flagOf(s.country) : '';
   const [photo, icon, flagImg, eyes, wink] = await Promise.all([
-    loadImg('/teahouse.jpg'), loadImg('/icons/icon-192.png'),
+    loadImg('/teahouse.jpg'), loadImg('/icons/v2/icon-192.png'),
     flag && flag !== '🌍' ? loadImg(emojiUrl(flag), true) : Promise.resolve(null), loadImg(emojiUrl('👀'), true), loadImg(emojiUrl('😉'), true),
   ]);
 

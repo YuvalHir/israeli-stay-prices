@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   },
   twitter: { card: 'summary_large_image', title: 'כמה ישראלים שילמו ללילה? 👀', description: 'התמקחת? ספר לחבריך.', images: ['/og.jpg'] },
   appleWebApp: { capable: true, title: 'מחיר ללילה', statusBarStyle: 'default' },
-  icons: { icon: '/icons/favicon-32.png', apple: '/icons/apple-touch-icon.png' },
+  icons: { icon: '/icons/v2/favicon-32.png', apple: '/icons/v2/apple-touch-icon.png' },
 };
 export const viewport: Viewport = { themeColor: '#f6f3ee', width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 

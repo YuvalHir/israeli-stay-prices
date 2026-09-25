@@ -168,7 +168,7 @@ function InstallSheet({ ios, onInstall, onClose }: { ios: boolean; onInstall: ()
   const safari = ios && !/CriOS|FxiOS|EdgiOS|GSA\//.test(navigator.userAgent);
   return <Sheet onClose={onClose}>{dismiss => <>
       <div className="sheet-step">
-        <img className="a2hs-icon" src="/icons/icon-96.webp" alt="" />
+        <img className="a2hs-icon" src="/icons/v2/icon-96.webp" alt="" />
         <h2>שים את מחיר ללילה במסך הבית</h2>
         <p>נפתח בלחיצה כמו אפליקציה, במסך מלא, בלי לחפש את הלינק. בלי חנות ובלי הורדה.</p>
       </div>
@@ -670,7 +670,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
 
   const Header = ({ light = false }: { light?: boolean }) => <header className={`header ${light ? 'light' : ''} ${scrolled && !light ? 'scrolled' : ''}`}>
     <button className="brand" onClick={() => { setArea(null); setOpen(null); setReporting(null); setStatus('idle'); }}>
-      <img src="/icons/icon-96.webp" alt="" width="32" height="32" /><span>מחיר ללילה</span>
+      <img src="/icons/v2/icon-96.webp" alt="" width="32" height="32" /><span>מחיר ללילה</span>
     </button>
     <nav>
       {!installed && (installEvt || ios) && <button className="chip" onClick={() => offerInstall(true)}>📲 התקן</button>}

@@ -8,7 +8,7 @@ const V = 'v3';
 const SHELL = `sp-shell-${V}`, STATIC = `sp-static-${V}`, MEDIA = `sp-media-${V}`, DATA = `sp-data-${V}`;
 const KEEP = [SHELL, STATIC, MEDIA, DATA];
 // Small on purpose: the first visit may be on 2G. Big icons are fetched by the OS only when installing.
-const PRECACHE = ['/', '/manifest.webmanifest', '/icons/icon-96.webp', '/teahouse-480.webp'];
+const PRECACHE = ['/', '/manifest.webmanifest', '/icons/v2/icon-96.webp', '/teahouse-480.webp'];
 const MEDIA_MAX = 300;
 
 self.addEventListener('install', (e) => {
