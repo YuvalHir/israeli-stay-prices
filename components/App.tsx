@@ -223,9 +223,21 @@ function AccountSheet({ me, onClose, onLogout, say }: { me: { name?: string | nu
 }
 
 /** Why we ask for Google sign-in. Shown before every sign-in. */
-function LoginNote() {
-  return <div className="login-note"><span aria-hidden="true">🔒</span><p><b>למה להתחבר?</b> כדי למנוע דיווחים כפולים ולא אמינים.</p></div>;
+function LoginNote({ onMore }: { onMore: () => void }) {
+  return <div className="login-note"><span aria-hidden="true">🔒</span><p>
+    <b>למה להתחבר?</b> כדי למנוע דיווחים כפולים ולא אמינים. <strong className="hl">מגוגל אנחנו מקבלים רק שם ומייל.</strong> הם לא מוצגים למשתמשים אחרים, והדיווחים שלך מופיעים בלי שם.{' '}
+    <button type="button" className="linkish" onClick={onMore}>איזה עוד מידע אנחנו שומרים?</button></p></div>;
 }
+
+const PRIVACY_ITEMS: [string, string, string][] = [
+  ['👤', 'מגוגל', 'שם, מייל ומזהה החשבון בגוגל. לא תמונת פרופיל.'],
+  ['💬', 'דיווחים והצבעות', 'מקושרים לחשבון שלך כדי למנוע כפילויות, אבל מוצגים לכולם בלי שם.'],
+  ['📍', 'אזורים שחיפשת', 'המיקום והשעה של כל חיפוש עם מחירים, כדי לספור את 5 החיפושים.'],
+  ['🎟️', 'הזמנות', 'מי הזמין אותך, והקישורים שיצרת ומי הצטרף דרכם.'],
+  ['⚙️', 'פרטי חשבון', 'תאריך ההרשמה, והגדרות כמו חשבון מנהל או חסימה.'],
+  ['🍪', 'עוגיות', 'עוגיית התחברות. מי שלא מחובר מקבל מזהה אקראי ורשימת המקומות שפתח, כדי לספור 3 צפיות חינם.'],
+  ['📊', 'סטטיסטיקה', 'ספירה יומית אנונימית של פעולות באתר, ו-Cloudflare Web Analytics בלי עוגיות.'],
+];
 
 function Sheet({ onClose, className = '', children }: { onClose?: () => void; className?: string; children: (dismiss: () => void) => React.ReactNode }) {
   const [closing, setClosing] = useState(false);
@@ -348,6 +360,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   useEffect(() => { if (loginPop) track('login_open'); }, [loginPop]);
   const [acct, setAcct] = useState(false);
   const [inviteFrom, setInviteFrom] = useState<string | null>(null);
+  const [privacy, setPrivacy] = useState(false);
   const [sleepPick, setSleepPick] = useState<{ status: 'locating' | 'ready' | 'error'; places: Place[]; msg?: string } | null>(null);
 
   // Autocomplete: debounce, cancel the previous request, and drop any answer that isn't for the current text.
@@ -700,7 +713,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     {loginPop && <Sheet onClose={() => setLoginPop(false)}>{dismiss => <>
         <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>{loginWhy === 'plain' ? 'התחברות' : loginWhy === 'invite' ? 'הוזמנת! נשאר רק להתחבר' : loginWhy === 'report' ? 'רק להתחבר, וממשיכים' : 'נגמרו 3 הצפיות החינמיות'}</h2>
         <p>{loginWhy === 'report' ? 'הדיווח מוצג בלי שם ובלי מייל.' : 'התחבר כדי להמשיך.'} אחרי ההתחברות, כל דיווח על מחיר ששילמת, או 👍 על דיווח של מישהו אחר, פותח לך 5 חיפושים עם מחירים.</p></div>
-        <LoginNote />
+        <LoginNote onMore={() => setPrivacy(true)} />
         <a className="btn primary block" href="/api/auth/google">התחבר עם Google</a>
         <button className="btn ghost block" onClick={dismiss}>אחר כך</button>
       </>}</Sheet>}
@@ -736,7 +749,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
           <li><span>🤝</span><p><b>נותנים ומקבלים</b>מדווחים בעשר שניות כמה שילמתם, ובתמורה רואים את המחירים באזור.</p></li>
           <li><span>🗺️</span><p><b>על המפה, סביבך</b>מוצאים מה קרוב, גם בקליטה חלשה.</p></li>
         </ul>
-        <LoginNote />
+        <LoginNote onMore={() => setPrivacy(true)} />
         <a className="btn primary block" href="/api/auth/google">הצטרף עם Google</a>
         <button className="btn ghost block" onClick={dismiss}>קודם אסתכל</button>
       </>}</Sheet>}
@@ -752,6 +765,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
           : <button className="btn primary block" onClick={finishOnboarding}>📍 מצא מחירים לידי</button>}
         <button className="btn ghost block" onClick={dismiss}>דלג</button>
         {step === 2 && <p className="muted small center">נבקש גישה למיקום כדי להראות מה קרוב אליך. המיקום לא נשמר.</p>}
+      </>}</Sheet>}
+
+    {privacy && <Sheet onClose={() => setPrivacy(false)} className="privacy-sheet">{dismiss => <>
+        <h2>מה אנחנו שומרים</h2>
+        <ul className="privacy-list">{PRIVACY_ITEMS.map(([i, t, b]) => <li key={t}><span aria-hidden="true">{i}</span><p><b>{t}</b>{b}</p></li>)}</ul>
+        <p className="muted small">כתובות IP לא נשמרות, ושום דבר לא נמכר.</p>
+        <button className="btn primary block" onClick={dismiss}>הבנתי</button>
       </>}</Sheet>}
 
     {showLanding ? <div className="landing">
