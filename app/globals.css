@@ -448,3 +448,9 @@ button.adm-pill { cursor: pointer; }
 .adm-vote.down { background: var(--coral-soft); }
 .adm-empty { text-align: center; color: var(--ink2); padding: 36px 12px; background: var(--card); border: 1px dashed var(--line); border-radius: 16px; }
 @media (max-width: 520px) { .adm-row { flex-wrap: wrap; } .adm-actions { flex-direction: row; flex-wrap: wrap; width: 100%; padding-inline-start: 30px; } .adm-actions .btn { min-width: 0; flex: 1; } }
+/* Notch fix: no sheet may rise under the status bar/notch; tall sheets scroll inside instead */
+.sheet-backdrop { padding-top: calc(env(safe-area-inset-top) + 10px); }
+.sheet { max-height: calc(100dvh - env(safe-area-inset-top) - 10px); overflow-y: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.sheet::-webkit-scrollbar { display: none; }
+.sleep-list { max-height: min(46vh, calc(100dvh - env(safe-area-inset-top) - 330px)); min-height: 140px; }
+.hero { padding-top: 0; }

@@ -530,6 +530,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const knownCount = places.filter(p => counts[p.id]).length;
   const shown = onlyKnown ? places.filter(p => counts[p.id]) : places;
   const showLanding = !area && !reporting && !open;
+  // Status-bar tint follows what sits under it: dark over the landing photo (and the onboarding over it), light elsewhere.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]'); if (!meta) return;
+    const set = () => meta.setAttribute('content', showLanding && window.scrollY < window.innerHeight * 0.6 ? '#2b2621' : '#f6f3ee');
+    set(); window.addEventListener('scroll', set, { passive: true });
+    return () => { window.removeEventListener('scroll', set); meta.setAttribute('content', '#f6f3ee'); };
+  }, [showLanding]);
   const gate = !me ? null : !loggedIn ? { t: `${me.anonLeft ?? 3} מתוך 3 צפיות חינם`, ok: (me.anonLeft ?? 3) > 0 }
     : me.unlimited ? { t: 'אדמין · חיפושים ללא הגבלה', ok: true }
     : searchId ? { t: `המחירים באזור פתוחים · נשארו ${me.searchesLeft ?? 0} חיפושים`, ok: true }
