@@ -24,6 +24,11 @@ export async function createSession(userId: string) {
   const { DB } = await env();
   await DB.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
     .bind(await sha256(token), userId, expires.toISOString()).run();
+  // Housekeeping on sign-in: drop expired sessions and anonymous view lists older than 30 days.
+  await DB.batch([
+    DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(new Date().toISOString()),
+    DB.prepare(`DELETE FROM anon_views WHERE created_at < datetime('now', '-30 days')`),
+  ]);
   return { token, expires };
 }
 

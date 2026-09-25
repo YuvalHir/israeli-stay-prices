@@ -1,9 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { env } from '@/lib/env';
+import { rateLimited, tooMany } from '@/lib/security';
 import { areaPhotos, commonsInfo, osmPhotoTags, wikidataImages, type Photo } from '@/lib/photos';
 
 // Place photos from Wikimedia (linked via OSM wikidata/wikimedia_commons/image tags), plus free photos
 // of the surrounding area as a fallback. Images are hotlinked from upload.wikimedia.org, never stored.
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  if (await rateLimited(await env(), req, 'photos')) return tooMany();
   const u = new URL(req.url);
   const lat = Number(u.searchParams.get('lat')), lon = Number(u.searchParams.get('lon'));
   const ids = (u.searchParams.get('ids') ?? '').split(',').filter(x => /^osm-(node|way|relation)-\d+$/.test(x)).slice(0, 80);
