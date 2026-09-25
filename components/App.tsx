@@ -11,6 +11,7 @@ import { BOOT_HTML, BOOT_JS } from '@/lib/boot';
 import { trekDealRegion, matchesRoomDeal } from '@/lib/trekDeal';
 import { clearOfflinePacks, listOfflinePacks } from '@/lib/offlinePack';
 import { offlineNearby } from '@/lib/offlineNearby';
+import { prefetchPublicArea, consumePrefetchedArea } from '@/lib/publicPrefetch';
 import { reportAgeDays, freshnessLabel, weightedMedian } from '@/lib/freshness';
 import { clearPendingReports, syncPendingReports } from '@/lib/offlineReports';
 import OfflineTreks from '@/components/OfflineTreks';
@@ -202,6 +203,29 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const sugFresh = sugFor !== '' && sugFor === search.trim();
   const sugBusy = search.trim().length >= 2 && !sugFresh;
   const liveSugs = sugFresh ? sugs : [];
+  // Only a small public area response, after a suggestion has settled.
+  useEffect(() => {
+    const first = liveSugs.find(x => x.type === 'area' || x.type === 'stay');
+    if (!first) return;
+    const t = setTimeout(() => { void prefetchPublicArea(first); }, 450);
+    return () => clearTimeout(t);
+  }, [sugFor, search]);
+  // A granted permission can be used quietly. Never ask for location on first paint.
+  useEffect(() => {
+    // iOS Safari/PWA permission semantics differ; avoid a surprise prompt there.
+    if (initialPlace || /iPad|iPhone|iPod/.test(navigator.userAgent) || !navigator.geolocation || !navigator.permissions?.query) return;
+    let gone = false;
+    const timer = setTimeout(async () => {
+      try {
+        const permission = await navigator.permissions.query({ name: 'geolocation' });
+        if (gone || permission.state !== 'granted') return;
+        navigator.geolocation.getCurrentPosition(p => {
+          if (!gone) void prefetchPublicArea({ lat: p.coords.latitude, lon: p.coords.longitude });
+        }, () => {}, { maximumAge: 300000, timeout: 3500 });
+      } catch { /* iOS Permissions API may not support geolocation: skip without a prompt */ }
+    }, 1200);
+    return () => { gone = true; clearTimeout(timer); };
+  }, []);
 
   // A cached old copy of the app (weak signal, service worker) notices a new deploy and reloads once.
   useEffect(() => {
@@ -272,7 +296,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       // The pre-React script may already have asked for this exact area (shared link or early pick).
       const ba = (window as any).__bootArea, early = ba && ba.lat === a.lat && ba.lon === a.lon ? ba.p as Promise<unknown> : null;
       (window as any).__bootArea = null;
-      const j = await (early ?? fetch(`/api/area?lat=${a.lat}&lon=${a.lon}`).then(r => r.ok ? r.json() : null)).catch(() => null) as { places: Place[] | null; reported: (Place & { n: number })[]; counts: Record<string, number> } | null;
+      const j = await (early ?? consumePrefetchedArea(a) ?? fetch(`/api/area?lat=${a.lat}&lon=${a.lon}`).then(r => r.ok ? r.json() : null)).catch(() => null) as { places: Place[] | null; reported: (Place & { n: number })[]; counts: Record<string, number> } | null;
       const km = (p: { lat: number; lon: number }) => Math.hypot((p.lat - a.lat) * 111, (p.lon - a.lon) * 111 * Math.cos(a.lat * Math.PI / 180));
       const osm = j?.places?.length ? j.places.map(p => ({ ...p, distance: km(p) })) : await nearbyStays(a.lat, a.lon).catch(() => [] as Place[]);
       const reported = j?.reported ?? await fetch(`/api/reports?lat=${a.lat}&lon=${a.lon}`).then(r => r.json()).then(j => (j.places ?? []) as (Place & { n: number })[]).catch(() => []);
@@ -314,6 +338,22 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       hasPack ? '📵 אין לודג׳ים שמורים במרחק 2 ק״מ מהמיקום שלך. אפשר לדווח ידנית; מסלול חדש דורש רשת.' :
       '📵 אין מסלול שמור במכשיר הזה. מחירים חדשים דורשים רשת; אפשר לדווח ידנית כשהחשבון נשמר במכשיר.');
   };
+  useEffect(() => {
+    if (!offlineArea) return;
+    const expire = () => {
+      const owner = localStorage.getItem('sp_offline_owner');
+      listOfflinePacks().then(packs => {
+        const a = areaRef.current;
+        if (!a || !owner) return;
+        const entries = offlineNearby(packs, owner, a.lat, a.lon);
+        setListPrices(Object.fromEntries(entries.map(x => [x.place.id, x.prices.map(p => [p.price, p.currency, p.beds, p.israeliDeal] as [number, string, number | null, number])])));
+        setListFeatures(Object.fromEntries(entries.map(x => [x.place.id, x.prices.map(p => [p.beds, p.israeliDeal] as [number | null, number])])));
+      }).catch(() => { setListPrices({}); setListFeatures({}); });
+    };
+    const t = setInterval(expire, 60_000);
+    document.addEventListener('visibilitychange', expire);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', expire); };
+  }, [offlineArea]);
   const networkReady = async () => {
     if (!navigator.onLine) return false;
     try { const r = await fetch('/api/auth/me', { cache: 'no-store', signal: AbortSignal.timeout(2500) }); return r.ok; }
@@ -584,7 +624,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         {sugOpen && liveSugs.length > 0 && <ul className="ac-list" role="listbox">{liveSugs.map((sg, i) => <Fragment key={i}>
           {(i === 0 || liveSugs[i - 1].type !== sg.type) && <li className="ac-head" aria-hidden="true">{sg.type === 'stay' ? 'מקומות לינה' : 'ערים ואזורים'}</li>}
           <li role="option" aria-selected={false}>
-          <button onMouseDown={e => e.preventDefault()} onClick={() => pickSug(sg)}>
+          <button onMouseDown={e => e.preventDefault()} onPointerEnter={() => { void prefetchPublicArea(sg); }} onTouchStart={() => { void prefetchPublicArea(sg); }} onClick={() => pickSug(sg)}>
             <span className={`ac-icon ${sg.type === 'stay' ? 'stay' : ''}`}>{sg.type === 'stay' ? (KIND_ICON[sg.kind ?? ''] ?? '🏨') : '📍'}</span>
             <span className="ac-text"><b dir="auto">{sg.name}</b>{sg.sub && <small dir="auto">{sg.sub}</small>}</span>
             <span className="ac-flag">{flagOf(sg.country)}</span></button>
@@ -592,7 +632,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       </div>
       <button className="btn primary" onClick={() => liveSugs[0] ? pickSug(liveSugs[0]) : doSearch()}>חפש</button>
     </div>
-    <div className="chips">{QUICK_AREAS.map(a => <button key={a.name} className="chip" onClick={() => loadArea(a)}>{flagOf(a.country)} {a.name}</button>)}</div>
+    <div className="chips">{QUICK_AREAS.map(a => <button key={a.name} className="chip" onPointerEnter={() => { void prefetchPublicArea(a); }} onTouchStart={() => { void prefetchPublicArea(a); }} onClick={() => loadArea(a)}>{flagOf(a.country)} {a.name}</button>)}</div>
   </div>;
 
   const Footer = <footer className="footer">
