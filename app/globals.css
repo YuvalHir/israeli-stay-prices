@@ -580,3 +580,18 @@ button.adm-pill { cursor: pointer; }
 .empty-area-cta { margin: 16px 0 24px; border: 1px solid var(--teal); background: var(--teal-soft); }
 .empty-area-cta h2 { font-size: 22px; margin: 0 0 8px; }
 .empty-area-cta p { line-height: 1.6; margin: 0 0 16px; }
+
+/* Keep short mobile facts intact. Long facts get their own full-width row. */
+.summary-meta, .report-age, .per-person-note { display: flex; flex-wrap: wrap; gap: 3px 10px; align-items: baseline; }
+.summary-meta { justify-content: center; }
+.summary-meta > span, .report-age > span, .per-person-note > span { white-space: nowrap; }
+.summary-meta > span:has(bdi) { flex-basis: 100%; }
+.report-top { align-items: flex-start; }
+.report-age { justify-content: flex-end; flex: 1 1 155px; min-width: 0; }
+.per-person-note { margin: 7px 0; }
+@media (max-width: 390px) { .report-top { flex-wrap: wrap; } .report-age { flex-basis: 100%; justify-content: flex-start; } }
+
+@media (max-width: 370px) { .report-age, .per-person-note { gap: 3px 6px; } .report-age { font-size: 12px; } .per-person-note { font-size: 12px; } }
+
+.report .vote { white-space: nowrap; min-width: 0; }
+@media (max-width: 370px) { .report .vote { padding-inline: 5px; font-size: 12px; } }

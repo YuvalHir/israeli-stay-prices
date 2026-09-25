@@ -723,21 +723,21 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 {summary && new Set(filteredReports.map(r => r.room)).size === 1 && <div className="card price-card">
                   <span className="muted small">חציון ללילה · {filteredReports[0]?.room === 'dorm' ? 'למיטה בדורם' : 'לכל החדר*'}</span>
                   <div className="big-price"><PriceTag amount={summary.med} cur={summary.cur} roll /></div>
-                  <div className="muted small">החציון נותן יותר משקל למחירים משהייה ודיווח טריים · {summary.cur !== dispCur ? 'אין שער המרה כרגע · ' : ''}{summary.n === 1 ? 'דיווח אחד' : `${summary.n} דיווחים`}{summary.n > 1 ? ` · טווח ${money(summary.min, summary.cur)} – ${money(summary.max, summary.cur)}` : ''}</div>
+                  <div className="summary-meta muted small"><span>מחירים חדשים שוקלים יותר</span><span>{summary.n === 1 ? 'דיווח אחד' : `${summary.n} דיווחים`}</span>{summary.n > 1 && <span>טווח: <bdi>{money(summary.min, summary.cur)} – {money(summary.max, summary.cur)}</bdi></span>}{summary.cur !== dispCur && <span>אין שער המרה כרגע</span>}</div>
                 </div>}
                 {summary && new Set(filteredReports.map(r => r.room)).size > 1 && <p className="muted small">יש כאן מחירים לחדרים ולמיטות בדורם. מוצגים הדיווחים בנפרד כדי לא לערבב ביניהם.</p>}
                 <ul className="reports">{filteredReports.map(r => { const c = conv(r.price, r.currency); const same = r.currency === dispCur || c == null; return <li key={r.id} className="card report">
                   <div className="report-top">
                     <b className="report-price">{r.israeli_deal ? 'לינה חינם*' : same ? <PriceTag amount={r.price} cur={r.currency} /> : <PriceTag amount={c!} cur={dispCur} approx />} <span className="muted small">{r.room === 'private' ? 'ללילה*' : 'למיטה ללילה'}</span></b>
-                    <span className="muted small report-age">שהייה: {monthLabel(r.stay_month)} · {freshnessLabel(r.created_at ? reportAgeDays(r.created_at, null) : null)}</span>
+                    <span className="muted small report-age"><span>שהייה: {monthLabel(r.stay_month)}</span><span>{freshnessLabel(r.created_at ? reportAgeDays(r.created_at, null) : null)}</span></span>
                   </div>
-                  {r.room === 'private' && <p className="muted small per-person-note">* המחיר ללילה לכל החדר{r.beds && !r.israeli_deal ? ` · ${money(Math.round(r.price / r.beds * 100) / 100, r.currency)} לאדם בחדר מלא (${r.beds} מיטות)` : ''}</p>}
+                  {r.room === 'private' && <div className="muted small per-person-note"><span>* מחיר ללילה לכל החדר</span>{r.beds && !r.israeli_deal && <><span>לאדם: <bdi>{money(Math.round(r.price / r.beds * 100) / 100, r.currency)}</bdi></span><span>בחדר מלא: {r.beds} מיטות</span></>}</div>}
                   <div className="muted small">{ROOM_HE[r.room]}{r.beds ? ` · ${r.beds} מיטות בחדר` : ''}{r.israeli_deal ? ' · הדיל הישראלי' : ''}{r.nights > 1 ? ` · ${r.nights} לילות` : ''}{!same && !r.israeli_deal ? ` · שולם ${money(r.price, r.currency)}` : ''}</div>
                   {!!r.israeli_deal && <p className="muted small deal-caption">* הלינה בחינם בתנאי שאוכלים בוקר וערב בלודג׳. הארוחות בתשלום.</p>}
                   {r.note && <p className="report-note">{r.note}</p>}
                   <div className="votes">
                     {r.mine_report ? <span className="muted small">הדיווח שלך · 👍 {r.up ?? 0} · 👎 {r.down ?? 0}</span> : <>
-                      <button className={`vote ${r.my_vote === 1 ? 'on up' : ''}`} onClick={() => vote(r, 1)}>👍 שילמתי אותו דבר <b>{r.up ?? 0}</b></button>
+                      <button className={`vote ${r.my_vote === 1 ? 'on up' : ''}`} onClick={() => vote(r, 1)}>👍 אותו מחיר <b>{r.up ?? 0}</b></button>
                       <button className={`vote ${r.my_vote === -1 ? 'on down' : ''}`} onClick={() => vote(r, -1)}>👎 שילמתי יותר <b>{r.down ?? 0}</b></button>
                     </>}
                   </div>
