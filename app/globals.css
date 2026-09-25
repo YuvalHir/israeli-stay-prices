@@ -377,3 +377,7 @@ body { text-rendering: optimizeLegibility; }
 .toast { width: max-content; max-width: calc(100% - 32px); text-align: center; line-height: 1.4; }
 /* Round 12: the median price rolls up; tabular digits keep it from jittering */
 .big-price .num { font-variant-numeric: tabular-nums; }
+/* Round 13: clear keyboard focus rings (hidden for taps), gentle haptics on save/like where supported */
+:focus { outline: none; }
+:focus-visible { outline: 3px solid rgba(22,128,108,.5); outline-offset: 2px; border-radius: 12px; }
+.place:focus-visible, .sleep-opt:focus-visible { outline-offset: 3px; }

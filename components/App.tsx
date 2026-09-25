@@ -93,7 +93,7 @@ function ReportForm({ place, area, country, onDone, onCancel }: { place: Place |
       body: JSON.stringify({ placeId: place?.id, placeName: name, placeKind: place?.kind, lat: place?.lat, lon: place?.lon, area, country, price: p, currency, room, nights, stayMonth: month, note }),
     });
     if (!res.ok) { setBusy(false); return setError(res.status === 401 ? 'צריך להתחבר קודם.' : 'השמירה לא הצליחה. נסה שוב.'); }
-    setBusy(false); onDone('תודה! המחיר נשמר, וקיבלת 5 חיפושים עם מחירים.', { placeName: name.trim(), price: p, currency, country, room, nights, month, lat: place?.lat, lon: place?.lon });
+    setBusy(false); try { navigator.vibrate?.([12, 40, 18]); } catch {} onDone('תודה! המחיר נשמר, וקיבלת 5 חיפושים עם מחירים.', { placeName: name.trim(), price: p, currency, country, room, nights, month, lat: place?.lat, lon: place?.lon });
   };
   return <section className="card form">
     <div className="form-head"><button className="icon-btn" onClick={onCancel} aria-label="חזרה">→</button><div><h2>כמה שילמת ללילה?</h2><p className="muted small form-sub">{SLOGAN} 😉</p></div></div>
@@ -456,6 +456,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     const j = await res.json();
     setOpenState(s => ({ ...s, reports: s.reports?.map(x => x.id === r.id ? { ...x, up: j.up, down: j.down, my_vote: next || null } : x) }));
     setMe(x => x ? { ...x, searchesLeft: j.searchesLeft, likes: j.likes } : x);
+    try { navigator.vibrate?.(10); } catch {}
     if (next === 1) {
       say('תודה! לייק נחשב כדיווח: קיבלת 5 חיפושים עם מחירים.');
       if (!searchRef.current && areaRef.current) { const sid = await startSearch(areaRef.current); loadListPrices(places, sid); }
