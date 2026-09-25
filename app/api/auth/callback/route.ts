@@ -33,7 +33,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${e.APP_URL}/?login=failed`);
   }
 
-  const isNew = !(await e.DB.prepare('SELECT 1 FROM users WHERE id = ?').bind(payload.sub).first());
+  const existing = await e.DB.prepare('SELECT banned FROM users WHERE id = ?').bind(payload.sub).first<{ banned: number }>();
+  const isNew = !existing;
+  if (existing?.banned) return NextResponse.redirect(`${e.APP_URL}/?login=blocked`);
   const admins = (e.ADMIN_EMAILS ?? '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
   const isAdminEmail = admins.includes(payload.email.toLowerCase());
   // Sign-up is invite-only: a new account needs a valid personal invite link (admins excepted).
@@ -58,9 +60,8 @@ export async function GET(req: NextRequest) {
   }
   if (isNew) await countEvent(e.DB, 'signup');
 
-  if (isAdminEmail) {
-    await e.DB.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').bind(payload.sub).run();
-  }
+  // Admin rights follow ADMIN_EMAILS on every login (removing an email revokes it), plus admins granted in the panel.
+  await e.DB.prepare('UPDATE users SET is_admin = CASE WHEN ? = 1 OR admin_by_panel = 1 THEN 1 ELSE 0 END WHERE id = ?').bind(isAdminEmail ? 1 : 0, payload.sub).run();
 
   const { token, expires } = await createSession(payload.sub);
   const res = NextResponse.redirect(`${e.APP_URL}/`);

@@ -12,14 +12,15 @@ export async function validInvite(DB: DB, code: string | undefined | null) {
 
 /** My links and how many I have left. Used/revoked links still count against the quota. */
 export async function inviteState(DB: DB, userId: string, isAdmin: boolean) {
-  const [{ results }, q] = await Promise.all([
+  const [{ results }, q, c] = await Promise.all([
     DB.prepare(`SELECT i.code, i.created_at, i.used_at, i.revoked, u.name AS used_name FROM invites i LEFT JOIN users u ON u.id = i.used_by
       WHERE i.inviter_id = ? ORDER BY i.created_at DESC LIMIT 200`).bind(userId).all(),
     DB.prepare('SELECT invite_quota FROM users WHERE id = ?').bind(userId).first() as Promise<{ invite_quota: number } | null>,
+    DB.prepare('SELECT COUNT(*) AS n FROM invites WHERE inviter_id = ? AND (revoked = 0 OR used_by IS NOT NULL)').bind(userId).first() as Promise<{ n: number } | null>,
   ]);
   const quota = isAdmin ? 1000 : (q?.invite_quota ?? 10);
   const invites = (results as any[]).map(r => ({ code: r.code, created_at: r.created_at, used: !!r.used_at, revoked: !!r.revoked, used_name: r.used_name ? String(r.used_name).split(' ')[0] : null }));
-  const counted = invites.filter(i => !i.revoked || i.used).length;
+  const counted = c?.n ?? 0;
   return { invites, quota, left: Math.max(0, quota - counted), unlimited: isAdmin };
 }
 

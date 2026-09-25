@@ -24,6 +24,10 @@ export async function POST(req: NextRequest) {
   const s = await inviteState(DB, user.id, !!user.is_admin);
   if (s.left <= 0) return NextResponse.json({ error: 'no_invites_left', ...s }, { status: 402 });
   const code = newInviteCode();
-  await DB.prepare('INSERT INTO invites (code, inviter_id) VALUES (?, ?)').bind(code, user.id).run();
+  // Atomic: the quota is re-checked inside the INSERT, so two taps at once can't go over it.
+  const ins = await DB.prepare(
+    `INSERT INTO invites (code, inviter_id) SELECT ?1, ?2 WHERE (SELECT COUNT(*) FROM invites WHERE inviter_id = ?2 AND (revoked = 0 OR used_by IS NOT NULL)) < ?3`,
+  ).bind(code, user.id, s.quota).run();
+  if (!ins.meta?.changes) return NextResponse.json({ error: 'no_invites_left', ...s, left: 0 }, { status: 402 });
   return NextResponse.json({ code, ...(await inviteState(DB, user.id, !!user.is_admin)) });
 }

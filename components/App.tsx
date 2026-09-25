@@ -496,6 +496,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     const at = new URLSearchParams(location.search).get('at')?.split(',').map(Number);
     const lp = new URLSearchParams(location.search).get('login');
     if (lp === 'failed') say('ההתחברות עם Google לא הצליחה. נסה שוב.');
+    if (lp === 'blocked') say('החשבון הזה חסום. אם זו טעות, פנה למנהל האתר.');
     if (lp === 'invite_required') say('ההרשמה כרגע בהזמנה בלבד. בקש קישור אישי מחבר שכבר בפנים 🎟️');
     const inv = new URLSearchParams(location.search).get('invite'), from = new URLSearchParams(location.search).get('from');
     try { const t = Number(localStorage.getItem('sp_invited') || 0); if (localStorage.getItem('sp_member') === '1' || (t && Date.now() - t < 29 * 864e5)) setCanJoin(true); } catch {}

@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     case 'setAdmin':
       if (!b.id) break;
       if (b.id === admin.id && !b.value) return NextResponse.json({ error: 'cannot_remove_self' }, { status: 400 });
-      await DB.prepare('UPDATE users SET is_admin = ? WHERE id = ?').bind(b.value ? 1 : 0, b.id).run();
+      await DB.prepare('UPDATE users SET is_admin = ?1, admin_by_panel = ?1 WHERE id = ?2').bind(b.value ? 1 : 0, b.id).run();
       return NextResponse.json({ ok: true });
     case 'ban':
       // Blocking stops new reports and votes and hides the user's reports; unblocking shows them again.
