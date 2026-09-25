@@ -7,7 +7,14 @@ import type { Place } from '@/lib/places';
 
 function Recenter({ lat, lon }: { lat: number; lon: number }) {
   const map = useMap();
-  useEffect(() => { map.setView([lat, lon], 15); }, [lat, lon, map]);
+  useEffect(() => {
+    const c = map.getCenter();
+    const far = map.distance(c, [lat, lon]) > 30000;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    // Nearby moves glide like Apple Maps; long jumps cut straight there.
+    if (far || reduce) map.setView([lat, lon], 15, { animate: false });
+    else map.flyTo([lat, lon], 15, { duration: 0.8, easeLinearity: 0.2 });
+  }, [lat, lon, map]);
   return null;
 }
 
