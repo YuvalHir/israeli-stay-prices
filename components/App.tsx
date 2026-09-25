@@ -243,6 +243,10 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const [loginPop, setLoginPop] = useState(false);
   const areaRef = useRef<Area | null>(null);
   const [listPrices, setListPrices] = useState<Record<string, [number, string][]>>({});
+  // True until auth and this area's prices have both resolved: show neutral placeholders, never a false 'locked'.
+  const [pricesLoading, setPricesLoading] = useState(false);
+  const [meHint, setMeHint] = useState<{ n?: string } | null>(null);
+  useEffect(() => { try { setMeHint(JSON.parse(localStorage.getItem('sp_me_hint') ?? 'null')); } catch {} }, []);
   const [status, setStatus] = useState<'idle' | 'locating' | 'loading' | 'ready' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
@@ -315,10 +319,10 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     setToastOut(false); setToast(m);
     toastTimers.current.push(setTimeout(() => hideToast(m), 4200));
   };
-  const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then((m: Me) => { setMe(m); return m; }).catch(() => { const m = { user: null }; setMe(m); return m as Me; });
+  const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then((m: Me) => { setMe(m); try { localStorage.setItem('sp_me_hint', JSON.stringify(m.user ? { n: (m.user.name ?? m.user.email ?? '?').trim()[0] } : {})); } catch {} return m; }).catch(() => { const m = { user: null }; setMe(m); return m as Me; });
   const loadListPrices = (list: Place[], sid: string | null) => {
-    if (!list.length) return;
-    fetch(`/api/reports?placeIds=${encodeURIComponent(list.map(p => p.id).join(','))}${sid ? `&searchId=${sid}` : ''}`)
+    if (!list.length) return Promise.resolve();
+    return fetch(`/api/reports?placeIds=${encodeURIComponent(list.map(p => p.id).join(','))}${sid ? `&searchId=${sid}` : ''}`)
       .then(r => r.json()).then(j => { setCounts(j.counts ?? {}); setListPrices(j.prices ?? {}); }).catch(() => {});
   };
   /** Spend (or reuse) one search with prices for the area. Returns the search id or null. */
@@ -336,7 +340,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const loadArea = async (a: Area, keepOpen = false) => {
     if (GENERIC.includes(a.name)) localityAt(a.lat, a.lon).then(l => { if (l) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, label: l.name, country: cur.country ?? l.country } : cur); });
     if (!a.country) countryAt(a.lat, a.lon).then(c => { if (c) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, country: c } : cur); });
-    setListPrices({}); setSearchId(null); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
+    setListPrices({}); setSearchId(null); setPricesLoading(true); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
     try {
       const [osm, reported] = await Promise.all([
         nearbyStays(a.lat, a.lon).catch(() => [] as Place[]),
@@ -354,10 +358,11 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         .then(j => { if (areaRef.current === a) setPhotos({ places: j.places ?? {}, area: j.area ?? [] }); }).catch(() => {});
       setCounts(Object.fromEntries(reported.map(r => [r.id, r.n])));
       setPlaces(found); setStatus('ready');
-      if (!found.length) { setMessage('לא נמצאו מקומות לינה במפה ברדיוס 2 ק״מ. אפשר לדווח ידנית.'); return; }
+      if (!found.length) { setPricesLoading(false); setMessage('לא נמצאו מקומות לינה במפה ברדיוס 2 ק״מ. אפשר לדווח ידנית.'); return; }
       const sid = await startSearch(a);
-      loadListPrices(found, sid);
-    } catch { setStatus('error'); setMessage('החיפוש במפה לא הצליח (אולי אין קליטה). נסה שוב או בחר אזור.'); }
+      await loadListPrices(found, sid);
+      if (areaRef.current === a) setPricesLoading(false);
+    } catch { setPricesLoading(false); setStatus('error'); setMessage('החיפוש במפה לא הצליח (אולי אין קליטה). נסה שוב או בחר אזור.'); }
   };
   const locate = (silent = false) => {
     if (!navigator.geolocation) { if (!silent) setMessage('המכשיר לא מאפשר מיקום. בחר אזור.'); setPicker(true); return; }
@@ -542,7 +547,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     set(); window.addEventListener('scroll', set, { passive: true });
     return () => { window.removeEventListener('scroll', set); meta.setAttribute('content', '#f6f3ee'); };
   }, [showLanding]);
-  const gate = !me ? null : !loggedIn ? { t: `${me.anonLeft ?? 3} מתוך 3 צפיות חינם`, ok: (me.anonLeft ?? 3) > 0 }
+  const gate = !me || (loggedIn && pricesLoading && !me.unlimited) ? (meHint?.n || me?.user ? { t: 'טוען את המחירים שלך…', ok: true, wait: true } : null) : !loggedIn ? { t: `${me.anonLeft ?? 3} מתוך 3 צפיות חינם`, ok: (me.anonLeft ?? 3) > 0 }
     : me.unlimited ? { t: 'אדמין · חיפושים ללא הגבלה', ok: true }
     : searchId ? { t: `המחירים באזור פתוחים · נשארו ${me.searchesLeft ?? 0} חיפושים`, ok: true }
     : { t: 'דווח מחיר או תן 👍 כדי לפתוח 5 חיפושים', ok: false };
@@ -556,6 +561,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       {DispSwitch}
       {me?.isAdmin && <a className="chip" href="/admin">אדמין</a>}
       {loggedIn ? <button className="avatar" onClick={logout} title={`התנתק (${me?.user?.email})`}>{(me?.user?.name ?? me?.user?.email ?? '?').trim()[0]}</button>
+        : !me ? (meHint?.n ? <span className="avatar pending" aria-hidden="true">{meHint.n}</span> : <span className="chip ghost-slot" aria-hidden="true" />)
         : <a className="chip strong" href="/api/auth/google">התחברות</a>}
     </nav>
   </header>;
@@ -744,7 +750,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 <button className="icon-btn" onClick={() => setPicker(!picker)} aria-label="שנה אזור">🔎</button>
               </div>
             </div>
-            {gate && <div className={`gate ${gate.ok ? 'ok' : ''}`}>{gate.ok ? '🔓' : '🎟️'} {gate.t}</div>}
+            {gate && <div className={`gate ${gate.ok ? 'ok' : ''} ${'wait' in gate ? 'wait' : ''}`}>{'wait' in gate ? '' : gate.ok ? '🔓 ' : '🎟️ '}{gate.t}</div>}
             <button className="btn sleep block" onClick={sleepHere}>😴 אני ישן כאן עכשיו · דיווח ב-10 שניות</button>
             {picker && <div className="card">{Picker}</div>}
             {area && <StayMap center={area} places={places} counts={counts} me={myPos} onSelect={openPlace} />}
@@ -760,6 +766,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 <Thumb place={p} photo={photoFor(p)} />
                 <span className="place-body"><span className="name" dir="auto">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
                 {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span>
+                  : n && (pricesLoading || !me) ? <span className="badge price-wait" aria-label="טוען מחיר"><i /></span>
                   : n ? <span className="badge locked price"><b>🔒 ₪••</b><small>{n === 1 ? 'דיווח 1' : `${n} דיווחים`}</small></span>
                   : <span className="badge empty">עוד אין מחיר</span>}
               </button></li>; })}</ul>
