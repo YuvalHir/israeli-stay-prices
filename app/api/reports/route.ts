@@ -4,6 +4,8 @@ import { currentUser } from '@/lib/auth';
 import { env } from '@/lib/env';
 import { isCurrency } from '@/lib/currency';
 import { creditState, searchCovers, searchValid } from '@/lib/gate';
+import { nominatimLookup } from '@/lib/placeLookup';
+import { badRequest, rateLimited, readJson, sameOrigin, tooMany, validCoord } from '@/lib/security';
 
 // Report counts per place (public, no prices) so the list can show "3 reports".
 export async function GET(req: NextRequest) {
@@ -44,34 +46,61 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ counts, prices });
 }
 
-type Body = {
-  placeId: string; placeName: string; placeKind?: string; lat?: number; lon?: number; area?: string;
-  country?: string; price: number; currency: string; room: 'dorm' | 'private'; nights?: number; stayMonth?: string; note?: string;
-};
+/** Limits that keep one account from farming searches or flooding a place. */
+const REPORTS_PER_DAY = 10;
+const OSM_ID = /^osm-(node|way|relation)-\d+$/;
+const MANUAL_ID = /^manual-[\p{L}\p{N}-]{1,200}$/u;
+const KINDS = ['hotel', 'guest_house', 'hostel', 'alpine_hut', 'motel', 'apartment', 'chalet', 'camp_site', 'lodge'];
 
 export async function POST(req: NextRequest) {
+  const e = await env();
+  if (!sameOrigin(req, e.APP_URL)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  if (await rateLimited(e, req, 'reports', 'RL_WRITE')) return tooMany();
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: 'login_required' }, { status: 401 });
   if (user.banned) return NextResponse.json({ error: 'blocked' }, { status: 403 });
-  const b = await req.json() as Body;
-  const price = Number(b.price);
-  if (!b.placeName?.trim() || !(price > 0) || price > 10_000_000 ||
-      !isCurrency(b.currency) || !['dorm', 'private'].includes(b.room)) {
-    return NextResponse.json({ error: 'bad_request' }, { status: 400 });
-  }
-  // Manual places are keyed by country + area + name, so same-named places in different towns stay separate.
-  const slug = (x?: string) => (x ?? '').trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
-  const placeId = b.placeId?.trim() || `manual-${(b.country ?? 'xx').toLowerCase()}-${slug(b.area) || 'area'}-${slug(b.placeName)}`;
-  const month = /^\d{4}-\d{2}$/.test(b.stayMonth ?? '') ? b.stayMonth! : new Date().toISOString().slice(0, 7);
-  const { DB } = await env();
+  const b = await readJson<Record<string, unknown>>(req);
+  if (!b) return badRequest();
+  const str = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0, max) : '';
+  const price = typeof b.price === 'number' ? b.price : Number(b.price);
+  const currency = str(b.currency, 3), room = str(b.room, 10);
+  let placeName = str(b.placeName, 120);
+  if (!placeName || !Number.isFinite(price) || !(price > 0) || price > 10_000_000 || !isCurrency(currency) || !['dorm', 'private'].includes(room)) return badRequest();
+  const nightsN = typeof b.nights === 'number' ? b.nights : Number(b.nights ?? 1);
+  if (!Number.isFinite(nightsN)) return badRequest();
+  const nights = Math.max(1, Math.min(60, Math.round(nightsN)));
+  const now = new Date(), thisMonth = now.toISOString().slice(0, 7);
+  const sm = str(b.stayMonth, 7);
+  // Stays from the last 2 years up to this month; anything else becomes this month.
+  const minMonth = `${now.getUTCFullYear() - 2}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(sm) && sm <= thisMonth && sm >= minMonth ? sm : thisMonth;
+  const area = str(b.area, 120) || null, note = str(b.note, 300) || null;
+  let country = /^[A-Za-z]{2}$/.test(str(b.country, 2)) ? str(b.country, 2).toUpperCase() : null;
+  let kind: string | null = KINDS.includes(str(b.placeKind, 20)) ? str(b.placeKind, 20) : null;
+  let lat: number | null = validCoord(b.lat, b.lon) ? b.lat as number : null, lon: number | null = lat == null ? null : b.lon as number;
+
+  // Place id: OSM ids are checked against OpenStreetMap and take its name and location. Anything else is a manual place keyed by country + area + name.
+  const slug = (x?: string | null) => (x ?? '').trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+  const rawId = str(b.placeId, 200);
+  let placeId: string;
+  if (OSM_ID.test(rawId)) {
+    const osm = (await nominatimLookup([rawId]).catch(() => ({} as Record<string, never>)))[rawId];
+    if (!osm) return NextResponse.json({ error: 'unknown_place' }, { status: 400 });
+    placeId = rawId; placeName = osm.name?.slice(0, 120) || placeName; lat = osm.lat; lon = osm.lon; country = osm.country ?? country; kind = osm.kind ?? kind;
+  } else if (MANUAL_ID.test(rawId)) placeId = rawId;
+  else placeId = `manual-${(country ?? 'xx').toLowerCase()}-${slug(area) || 'area'}-${slug(placeName) || 'place'}`;
+
+  const { DB } = e;
+  const lim = await DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM reports WHERE user_id = ?1 AND created_at >= datetime('now', '-1 day')) AS today,
+            (SELECT COUNT(*) FROM reports WHERE user_id = ?1 AND place_id = ?2 AND stay_month = ?3) AS same`,
+  ).bind(user.id, placeId, month).first<{ today: number; same: number }>();
+  if (!user.is_admin && (lim?.same ?? 0) > 0) return NextResponse.json({ error: 'duplicate' }, { status: 409 });
+  if (!user.is_admin && (lim?.today ?? 0) >= REPORTS_PER_DAY) return NextResponse.json({ error: 'daily_limit' }, { status: 429 });
   await DB.prepare(
     `INSERT INTO reports (id, user_id, place_id, place_name, place_kind, lat, lon, area, country, price, currency, room, nights, stay_month, note)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(
-    crypto.randomUUID(), user.id, placeId, b.placeName.trim().slice(0, 120), b.placeKind ?? null,
-    b.lat ?? null, b.lon ?? null, b.area?.slice(0, 120) ?? null, /^[A-Za-z]{2}$/.test(b.country ?? '') ? b.country!.toUpperCase() : null, price, b.currency, b.room,
-    Math.max(1, Math.min(60, Math.round(b.nights ?? 1))), month, b.note?.trim().slice(0, 300) || null,
-  ).run();
+  ).bind(crypto.randomUUID(), user.id, placeId, placeName, kind, lat, lon, area, country, price, currency, room, nights, month, note).run();
   await countEvent(DB, 'report_sent');
   return NextResponse.json({ ok: true, ...(await creditState(DB, user.id, !!user.is_admin)) });
 }

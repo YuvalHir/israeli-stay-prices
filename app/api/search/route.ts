@@ -3,13 +3,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { env } from '@/lib/env';
 import { creditState } from '@/lib/gate';
+import { badRequest, rateLimited, readJson, sameOrigin, tooMany, validCoord } from '@/lib/security';
 
 // Spend one "search with prices" on an area. Reuses a fresh search that already covers the point.
 export async function POST(req: NextRequest) {
+  const e = await env();
+  if (!sameOrigin(req, e.APP_URL)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  if (await rateLimited(e, req, 'search')) return tooMany();
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: 'login_required' }, { status: 401 });
-  const { lat, lon } = await req.json() as { lat: number; lon: number };
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return NextResponse.json({ error: 'bad_request' }, { status: 400 });
+  const body = await readJson<{ lat?: unknown; lon?: unknown }>(req);
+  if (!body || !validCoord(body.lat, body.lon)) return badRequest();
+  const lat = body.lat as number, lon = body.lon as number;
   const { DB } = await env();
   // Same spot searched again in the last hour (e.g. page reload) does not cost another search.
   const again = await DB.prepare(

@@ -1,7 +1,7 @@
 /** Server-side place details by OSM id (Nominatim lookup, cached a day), with D1 reports as fallback. */
 import { env } from './env';
 
-export type PlaceInfo = { id: string; name: string; kind: string; lat: number; lon: number; country?: string; locality?: string; region?: string; wikidata?: string; commons?: string; reports: number };
+export type PlaceInfo = { id: string; name: string; kind: string; lat: number; lon: number; country?: string; locality?: string; region?: string; wikidata?: string; commons?: string; reports: number; reporters?: number };
 const UA = { 'User-Agent': 'israeli-stay-prices/1.0 (https://github.com/YuvalHir/israeli-stay-prices)' };
 const LODGING = ['hotel', 'guest_house', 'hostel', 'alpine_hut', 'motel', 'apartment', 'chalet'];
 
@@ -30,13 +30,14 @@ export async function nominatimLookup(ids: string[]): Promise<Record<string, Omi
 
 export async function getPlace(id: string): Promise<PlaceInfo | null> {
   const { DB } = await env();
-  const agg = await DB.prepare(`SELECT MAX(place_name) AS name, MAX(place_kind) AS kind, AVG(lat) AS lat, AVG(lon) AS lon, MAX(country) AS country, MAX(area) AS area, COUNT(*) AS n FROM reports WHERE place_id = ? AND hidden = 0`)
-    .bind(id).first<{ name: string | null; kind: string | null; lat: number | null; lon: number | null; country: string | null; area: string | null; n: number }>();
+  const agg = await DB.prepare(`SELECT MAX(place_name) AS name, MAX(place_kind) AS kind, AVG(lat) AS lat, AVG(lon) AS lon, MAX(country) AS country, MAX(area) AS area, COUNT(*) AS n, COUNT(DISTINCT user_id) AS u FROM reports WHERE place_id = ? AND hidden = 0`)
+    .bind(id).first<{ name: string | null; kind: string | null; lat: number | null; lon: number | null; country: string | null; area: string | null; n: number; u: number }>();
+  const reporters = agg?.u ?? 0;
   const reports = agg?.n ?? 0;
   if (id.startsWith('osm-')) {
     const found = (await nominatimLookup([id]).catch(() => ({} as Record<string, never>)))[id];
-    if (found?.name) return { ...found, reports };
+    if (found?.name) return { ...found, reports, reporters };
   }
-  if (agg?.name) return { id, name: agg.name, kind: agg.kind ?? 'guest_house', lat: agg.lat ?? NaN, lon: agg.lon ?? NaN, country: agg.country ?? undefined, locality: agg.area && agg.area !== 'המיקום שלך' ? agg.area : undefined, reports };
+  if (agg?.name) return { id, name: agg.name, kind: agg.kind ?? 'guest_house', lat: agg.lat ?? NaN, lon: agg.lon ?? NaN, country: agg.country ?? undefined, locality: agg.area && agg.area !== 'המיקום שלך' ? agg.area : undefined, reports, reporters };
   return null;
 }

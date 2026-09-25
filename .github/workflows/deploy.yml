@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege: the workflow only reads the repo. Deploys use the Cloudflare token, not GITHUB_TOKEN.
+permissions:
+  contents: read
+
 concurrency:
   group: deploy
   cancel-in-progress: true
@@ -27,14 +31,16 @@ jobs:
           else
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: steps.token.outputs.ok == 'true'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: steps.token.outputs.ok == 'true'
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Tests
+        run: npm test
         if: steps.token.outputs.ok == 'true'
       - name: Apply database migrations
         if: steps.token.outputs.ok == 'true'

@@ -2,14 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { env } from '@/lib/env';
 import { creditState } from '@/lib/gate';
+import { badRequest, rateLimited, readJson, sameOrigin, tooMany } from '@/lib/security';
 
 // vote: 1 = "I paid the same", -1 = "I paid more", 0 = remove my vote.
 export async function POST(req: NextRequest) {
+  const e = await env();
+  if (!sameOrigin(req, e.APP_URL)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  if (await rateLimited(e, req, 'votes')) return tooMany();
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: 'login_required' }, { status: 401 });
   if (user.banned) return NextResponse.json({ error: 'blocked' }, { status: 403 });
-  const { reportId, vote } = await req.json() as { reportId: string; vote: number };
-  if (!reportId || ![1, -1, 0].includes(vote)) return NextResponse.json({ error: 'bad_request' }, { status: 400 });
+  const body = await readJson<{ reportId?: unknown; vote?: unknown }>(req);
+  if (!body) return badRequest();
+  const reportId = typeof body.reportId === 'string' ? body.reportId.slice(0, 64) : '', vote = body.vote as number;
+  if (!reportId || typeof vote !== 'number' || ![1, -1, 0].includes(vote)) return NextResponse.json({ error: 'bad_request' }, { status: 400 });
   const { DB } = await env();
   const r = await DB.prepare('SELECT user_id FROM reports WHERE id = ? AND hidden = 0').bind(reportId).first<{ user_id: string }>();
   if (!r) return NextResponse.json({ error: 'not_found' }, { status: 404 });

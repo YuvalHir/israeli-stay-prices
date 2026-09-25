@@ -97,7 +97,7 @@ function ReportForm({ place, area, country, onDone, onCancel }: { place: Place |
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ placeId: place?.id, placeName: name, placeKind: place?.kind, lat: place?.lat, lon: place?.lon, area, country, price: p, currency, room, nights, stayMonth: month, note }),
     });
-    if (!res.ok) { setBusy(false); return setError(res.status === 401 ? 'צריך להתחבר קודם.' : 'השמירה לא הצליחה. נסה שוב.'); }
+    if (!res.ok) { setBusy(false); return setError(res.status === 401 ? 'צריך להתחבר קודם.' : res.status === 409 ? 'כבר דיווחת על המקום הזה לחודש הזה. אפשר לדווח שוב על חודש אחר.' : res.status === 429 ? 'הגעת למגבלת הדיווחים להיום. נסה שוב מחר.' : 'השמירה לא הצליחה. נסה שוב.'); }
     setBusy(false); try { navigator.vibrate?.([12, 40, 18]); } catch {} onDone('תודה! המחיר נשמר, וקיבלת 5 חיפושים עם מחירים.', { placeName: name.trim(), price: p, currency, country, room, nights, month, lat: place?.lat, lon: place?.lon });
   };
   return <section className="card form">

@@ -43,9 +43,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const d = describe(info);
   const path = placePath(info);
   const image = photo && !photo.area ? { url: photo.src, alt: info.name } : { url: '/og.jpg', width: 1200, height: 630, alt: 'כמה ישראלים שילמו ללילה?' };
+  // Manual places (typed in by one user, not in OpenStreetMap) stay out of search until 2+ different people reported them.
+  const unverified = info.id.startsWith('manual-') && (info.reporters ?? 0) < 2;
   return {
     title: d.title, description: d.description,
     alternates: { canonical: path },
+    ...(unverified ? { robots: { index: false, follow: true } } : {}),
     openGraph: { type: 'website', locale: 'he_IL', siteName: 'מחיר ללילה', url: path, title: `${info.name} ${info.country ? flagOf(info.country) : ''} · כמה ישראלים שילמו כאן ללילה? 👀`, description: d.description, images: [image] },
     twitter: { card: 'summary_large_image', title: d.title, description: d.description, images: [image.url] },
   };

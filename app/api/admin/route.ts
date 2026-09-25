@@ -1,3 +1,4 @@
+import { badRequest, readJson, sameOrigin } from '@/lib/security';
 import { NextRequest, NextResponse } from 'next/server';
 import { currentAdmin } from '@/lib/auth';
 import { env } from '@/lib/env';
@@ -50,9 +51,10 @@ type Body = { action: string; id?: string; ids?: string[]; value?: boolean; user
 
 export async function POST(req: NextRequest) {
   const admin = await currentAdmin();
-  if (!admin) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  const b = await req.json() as Body;
-  const { DB } = await env();
+  const { DB, APP_URL } = await env();
+  if (!admin || !sameOrigin(req, APP_URL)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  const b = await readJson<Body>(req);
+  if (!b || typeof b.action !== 'string') return badRequest();
   const ids = (b.ids ?? (b.id ? [b.id] : [])).filter(x => typeof x === 'string').slice(0, 200);
   const inList = ids.map(() => '?').join(',');
   switch (b.action) {
