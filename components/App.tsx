@@ -399,8 +399,10 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   };
   // Keep the URL in sync: a closed place page goes back to "/"; browser back/forward reopens or closes places.
   useEffect(() => {
-    if (!open && typeof window !== 'undefined' && location.pathname.startsWith('/p/')) { history.replaceState(null, '', '/'); document.title = 'כמה ישראלים שילמו ללילה'; }
-    if (!open && typeof document !== 'undefined') document.title = 'כמה ישראלים שילמו ללילה';
+    // The initial openPlace call may push before this effect runs. Only reset a
+    // place URL when the detail has actually closed, never on the first mount.
+    if (!open && !pushedRef.current && typeof window !== 'undefined' && location.pathname.startsWith('/p/')) { history.replaceState(null, '', '/'); document.title = 'כמה ישראלים שילמו ללילה'; }
+    if (!open && !pushedRef.current && typeof document !== 'undefined') document.title = 'כמה ישראלים שילמו ללילה';
   }, [open]);
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
