@@ -1,8 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 
-// Public by design (Maps Embed keys are restricted by site referrer). Empty until Yuval adds MAPS_EMBED_KEY.
-const KEY = process.env.NEXT_PUBLIC_MAPS_EMBED_KEY ?? '';
+// Keyless classic Google Maps embed (Yuval's choice, 25 Sep 2026): no API key, no billing.
 
 const slowLink = () => {
   const c = (navigator as any).connection;
@@ -18,19 +17,26 @@ export default function GoogleMapCard({ name, lat, lon, locality }: { name: stri
   const [show, setShow] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [slow, setSlow] = useState(false);
+  const [failed, setFailed] = useState(false);
   const q = [name, locality].filter(Boolean).join(', ');
   const link = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 
   useEffect(() => {
-    setShow(false); setLoaded(false);
-    if (!KEY || !box.current) return;
+    setShow(false); setLoaded(false); setFailed(false); setSlow(false);
+    if (!box.current) return;
     if (slowLink()) { setSlow(true); return; }
     const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { setShow(true); io.disconnect(); } }, { rootMargin: '200px' });
     io.observe(box.current);
     return () => io.disconnect();
   }, [name, lat, lon]);
+  // A cross-origin iframe can't report errors: if it hasn't loaded in 15s, fall back to the link card.
+  useEffect(() => {
+    if (!show || loaded) return;
+    const t = setTimeout(() => setFailed(true), 15000);
+    return () => clearTimeout(t);
+  }, [show, loaded]);
 
-  if (!KEY) return <a className="card gmap-row" href={link} target="_blank" rel="noopener">
+  if (failed || typeof IntersectionObserver === 'undefined') return <a className="card gmap-row" href={link} target="_blank" rel="noopener">
     <span className="gmap-pin" aria-hidden="true">📍</span>
     <span className="gmap-txt"><b>פתח בגוגל מפות</b><span className="muted small">תמונות, ביקורות ומסלול</span></span>
     <span aria-hidden="true">↗</span>
@@ -39,12 +45,12 @@ export default function GoogleMapCard({ name, lat, lon, locality }: { name: stri
   return <section className="card gmap" ref={box} aria-label="המקום בגוגל מפות">
     <div className="gmap-frame">
       {show && <iframe title={`${name} בגוגל מפות`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen onLoad={() => setLoaded(true)}
-        src={`https://www.google.com/maps/embed/v1/place?key=${KEY}&q=${encodeURIComponent(q)}&center=${lat},${lon}&zoom=16&language=iw`} />}
+        src={`https://maps.google.com/maps?q=${encodeURIComponent(q)}&ll=${lat},${lon}&z=16&hl=iw&output=embed`} />}
       {!loaded && <div className="gmap-ph">
         <span className="gmap-pin" aria-hidden="true">📍</span>
         <b>תמונות, ביקורות ומסלול</b>
         <span className="muted small">{show ? 'טוען מפה…' : slow ? 'חיבור חלש: המפה לא נטענת אוטומטית' : 'בגוגל מפות'}</span>
-        {slow && KEY && <button className="btn small" onClick={() => { setSlow(false); setShow(true); }}>טען מפה בכל זאת</button>}
+        {slow && <button className="btn small" onClick={() => { setSlow(false); setShow(true); }}>טען מפה בכל זאת</button>}
       </div>}
     </div>
     <a className="btn block" href={link} target="_blank" rel="noopener">פתח בגוגל מפות ↗</a>
