@@ -729,7 +729,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 <button className="icon-btn" onClick={() => setPicker(!picker)} aria-label="שנה אזור">🔎</button>
               </div>
             </div>
-            {gate && <div className={`gate ${gate.ok ? 'ok' : ''} ${'wait' in gate ? 'wait' : ''}`}>{'wait' in gate ? '' : gate.ok ? '🔓 ' : '🎟️ '}{gate.t}</div>}
+            {gate ? <div className={`gate ${gate.ok ? 'ok' : ''} ${'wait' in gate ? 'wait' : ''}`}>{'wait' in gate ? '' : gate.ok ? '🔓 ' : '🎟️ '}{gate.t}</div> : <div className="gate gate-slot" aria-hidden="true">&nbsp;</div>}
             <button className="btn sleep block" onClick={sleepHere}>😴 אני ישן כאן עכשיו · דיווח ב-10 שניות</button>
             {picker && <div className="card">{Picker}</div>}
             {area && <StayMap center={area} places={places} counts={counts} me={myPos} onSelect={openPlace} />}

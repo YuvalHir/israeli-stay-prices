@@ -6,9 +6,9 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--page); color: var(--ink); font-family: inherit; }
 @font-face { font-family: Heebo; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/heebo-hebrew.woff2) format("woff2"); unicode-range: U+307-308, U+590-5FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F; }
-@font-face { font-family: Heebo; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/heebo-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2212, U+FEFF, U+FFFD; }
-@font-face { font-family: "Heebo Fallback"; src: local(Arial); ascent-override: 104.9%; descent-override: 42.14%; line-gap-override: 0%; size-adjust: 99.89%; }
-html { font-family: Heebo, "Heebo Fallback", system-ui, -apple-system, "Segoe UI", Arial, sans-serif; }
+/* Latin letters and digits use the phone's own font (no download); only Hebrew uses Heebo. */
+@font-face { font-family: "Heebo Fallback"; src: local(Arial); ascent-override: 104.9%; descent-override: 42.14%; line-gap-override: 0%; size-adjust: 99.89%; unicode-range: U+0590-05FF, U+FB1D-FB4F; }
+html { font-family: Heebo, "Heebo Fallback", -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, Arial, sans-serif; }
 body { -webkit-font-smoothing: antialiased; }
 a { color: inherit; }
 button, input, select { font: inherit; color: inherit; }
@@ -538,3 +538,4 @@ button.adm-pill { cursor: pointer; }
 .boot-wait { margin: 10px 2px 0; color: var(--ink2); font-size: 14px; }
 .boot-list { position: fixed; inset: 0; z-index: 900; background: var(--page); overflow: auto; }
 .boot-list .place { cursor: default; }
+.gate-slot { visibility: hidden; }

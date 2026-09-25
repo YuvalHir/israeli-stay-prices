@@ -23,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="he" dir="rtl">
       <head>
-        {/* Heebo, self-hosted: only Hebrew + basic Latin (2 files). Arrows and rare letters use the system font. */}
+        {/* Heebo, self-hosted, Hebrew only. Latin letters and digits use the phone font. */}
         <link rel="preload" href="/fonts/heebo-hebrew.woff2" as="font" type="font/woff2" crossOrigin="" />
         <link rel="preconnect" href="https://tile.openstreetmap.org" />
         <link rel="preconnect" href="https://upload.wikimedia.org" />
