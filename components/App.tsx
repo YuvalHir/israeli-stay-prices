@@ -250,7 +250,10 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     setListPrices({}); setSearchId(null); setPricesLoading(true); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
     try {
       // One edge request for places + counts; the direct OSM lookup is only the fallback.
-      const j = await fetch(`/api/area?lat=${a.lat}&lon=${a.lon}`).then(r => r.ok ? r.json() : null).catch(() => null) as { places: Place[] | null; reported: (Place & { n: number })[]; counts: Record<string, number> } | null;
+      // The pre-React script may already have asked for this exact area (shared link or early pick).
+      const ba = (window as any).__bootArea, early = ba && ba.lat === a.lat && ba.lon === a.lon ? ba.p as Promise<unknown> : null;
+      (window as any).__bootArea = null;
+      const j = await (early ?? fetch(`/api/area?lat=${a.lat}&lon=${a.lon}`).then(r => r.ok ? r.json() : null)).catch(() => null) as { places: Place[] | null; reported: (Place & { n: number })[]; counts: Record<string, number> } | null;
       const km = (p: { lat: number; lon: number }) => Math.hypot((p.lat - a.lat) * 111, (p.lon - a.lon) * 111 * Math.cos(a.lat * Math.PI / 180));
       const osm = j?.places?.length ? j.places.map(p => ({ ...p, distance: km(p) })) : await nearbyStays(a.lat, a.lon).catch(() => [] as Place[]);
       const reported = j?.reported ?? await fetch(`/api/reports?lat=${a.lat}&lon=${a.lon}`).then(r => r.json()).then(j => (j.places ?? []) as (Place & { n: number })[]).catch(() => []);
@@ -310,7 +313,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     // Hand-off from the pre-React search box: finish its pick, or move its text into the real picker.
     const W = window as any; W.__hyd = true;
     const bootEl = document.getElementById('boot'), bootIn = bootEl?.querySelector('input');
-    const bootPick = W.__boot?.pick as Suggestion | undefined, bootOpen = !!bootEl && !bootEl.hidden;
+    const bootPick = W.__boot?.pick as Suggestion | undefined, bootOpen = !!bootEl && !(bootEl.querySelector('.boot-search') as HTMLElement | null)?.hidden;
     const endBoot = () => { W.__bootGone = true; setBootOn(false); };
     W.__bootPick = (sg: Suggestion) => { endBoot(); window.scrollTo({ top: 0 }); try { localStorage.setItem('sp_onboarded', '1'); } catch {} pickSug(sg); };
     W.__bootBlur = (v: string) => { endBoot(); setPicker(true); if (v.trim()) { setSearch(v); setSugOpen(true); } };
@@ -621,7 +624,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         </div>
       </div>
       <main className="wrap">
-        {bootOn && <><div id="boot" hidden suppressHydrationWarning dangerouslySetInnerHTML={{ __html: BOOT_HTML }} /><script dangerouslySetInnerHTML={{ __html: BOOT_JS }} /></>}
+        {bootOn && <><div id="boot" suppressHydrationWarning dangerouslySetInnerHTML={{ __html: BOOT_HTML }} /><script dangerouslySetInnerHTML={{ __html: BOOT_JS }} /></>}
         {(picker || status === 'error') && <section className="card"><h2>לאן?</h2>{Picker}</section>}
         <h2 className="section-title">איך זה עובד</h2>
         <section className="steps">
