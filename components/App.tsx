@@ -19,6 +19,7 @@ type Report = {
   stay_month: string; note: string | null; up?: number; down?: number; my_vote?: number | null; mine_report?: number;
 };
 
+const GoogleMapCard = dynamic(() => import('@/components/GoogleMapCard'), { ssr: false });
 const StayMap = dynamic(() => import('@/components/StayMap'), { ssr: false, loading: () => <div className="map map-loading">טוען מפה…</div> });
 
 const ROOM_HE = { dorm: 'מיטה בדורם', private: 'חדר פרטי' } as const;
@@ -784,6 +785,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 <div className="card cta slogan"><h3>{SLOGAN} 😉</h3><p>שילמת כאן? הדיווח שלך עוזר לבא אחריך.</p>
                 <button className="btn primary block" onClick={() => loggedIn ? setReporting(open) : (setLoginWhy('report'), setLoginPop(true))}>שילמתי כאן, אדווח</button></div>
               </>}
+            <GoogleMapCard name={open.name} lat={open.lat} lon={open.lon} locality={open.locality} />
           </section>
 
         : <>
