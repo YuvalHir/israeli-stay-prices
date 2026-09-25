@@ -455,3 +455,6 @@ button.adm-pill { cursor: pointer; }
 .sleep-list { max-height: min(46vh, calc(100dvh - env(safe-area-inset-top) - 330px)); min-height: 140px; }
 .hero { padding-top: 0; }
 .sheet { overscroll-behavior-y: none; }
+/* Speed: light WebP hero (49KB on phones instead of a 200KB JPEG) */
+.hero-photo { background-image: linear-gradient(180deg, rgba(14,12,10,.35) 0%, rgba(14,12,10,.05) 30%, rgba(14,12,10,.85) 100%), url(/teahouse-720.webp); background-color: #3a2f27; }
+@media (min-width: 600px) { .hero-photo { background-image: linear-gradient(180deg, rgba(14,12,10,.35) 0%, rgba(14,12,10,.05) 30%, rgba(14,12,10,.85) 100%), url(/teahouse.webp); } }

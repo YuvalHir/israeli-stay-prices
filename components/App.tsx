@@ -37,11 +37,14 @@ function GitHubIcon() {
 type Photo = { src: string; page: string; author: string; license: string; licenseUrl?: string; area?: boolean; title?: string };
 function Thumb({ place, size = 'sm', photo }: { place: Pick<Place, 'kind'>; size?: 'sm' | 'lg'; photo?: Photo | null }) {
   const [bad, setBad] = useState(false);
+  const [full, setFull] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
-  useEffect(() => setBad(false), [photo?.src]);
+  useEffect(() => { setBad(false); setFull(false); }, [photo?.src]);
+  // 60px list thumbs only need a 250px Commons thumbnail (about a tenth of the bytes); fall back to the original URL if it fails.
+  const small = photo && size === 'sm' && !full ? photo.src.replace(/\/(\d+)px-([^/]+)$/, (m, w, f) => Number(w) > 250 ? `/250px-${f}` : m) : photo?.src;
   // Server-rendered images can finish loading before React attaches onLoad; reveal them anyway.
   useEffect(() => { const i = imgRef.current; if (i?.complete && i.naturalWidth) i.classList.add('in'); }, [photo?.src, bad]);
-  if (photo && !bad) return <div className={`thumb ${size} photo`}><img ref={imgRef} src={photo.src} alt="" loading="lazy" decoding="async" onLoad={e => e.currentTarget.classList.add('in')} onError={() => setBad(true)} />{photo.area && size === 'sm' && <i className="area-tag">אזור</i>}</div>;
+  if (photo && !bad) return <div className={`thumb ${size} photo`}><img ref={imgRef} src={small} alt="" loading="lazy" decoding="async" onLoad={e => e.currentTarget.classList.add('in')} onError={() => small !== photo.src ? setFull(true) : setBad(true)} />{photo.area && size === 'sm' && <i className="area-tag">אזור</i>}</div>;
   return <div className={`thumb ${size} ph ph-${place.kind}`} aria-hidden="true"><span>{KIND_ICON[place.kind] ?? '🏠'}</span></div>;
 }
 const CUR_SYMBOL: Record<string, string> = { ILS: '₪', USD: '$', EUR: '€', GBP: '£', THB: '฿', INR: '₹', JPY: '¥', VND: '₫' };
@@ -624,7 +627,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       </>}</Sheet>}
 
     {showLanding ? <div className="landing">
-      <div className="hero" style={{ backgroundImage: 'linear-gradient(180deg, rgba(14,12,10,.35) 0%, rgba(14,12,10,.05) 30%, rgba(14,12,10,.85) 100%), url(/teahouse.jpg)' }}>
+      <div className="hero hero-photo">
         <Header light />
         <div className="hero-text">
           <span className="pill">🌍 למטיילים ישראלים · בכל העולם</span>
