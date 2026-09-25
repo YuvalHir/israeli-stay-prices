@@ -576,3 +576,7 @@ button.adm-pill { cursor: pointer; }
 .per-person-note { margin: 4px 0; }
 
 .report-age { text-align: start; line-height: 1.45; }
+
+.empty-area-cta { margin: 16px 0 24px; border: 1px solid var(--teal); background: var(--teal-soft); }
+.empty-area-cta h2 { font-size: 22px; margin: 0 0 8px; }
+.empty-area-cta p { line-height: 1.6; margin: 0 0 16px; }

@@ -767,13 +767,15 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             {area && <StayMap center={area} places={places} counts={counts} me={myPos} onSelect={openPlace} />}
             {message && <p className="muted">{message}</p>}
             {status === 'loading' && <ul className="places">{[0, 1, 2, 3].map(i => <li key={i} className="card skeleton row-skel" />)}</ul>}
+            {status === 'ready' && places.length > 0 && !knownCount && <div className="card cta empty-area-cta"><h2>עוד אין מחירים באזור הזה</h2><p>{places.length === 1 ? 'יש ברשימה מקום לינה אחד מהמפה' : `יש ברשימה ${places.length} מקומות לינה מהמפה`}, אבל עדיין אין דיווח מחיר ממטיילים כאן. אם ישנת באזור, הדיווח שלך יעזור לבאים אחריך.</p><button className="btn primary block big" onClick={() => loggedIn ? setReporting('manual') : (setLoginWhy('report'), setLoginPop(true))}>היה לי כאן מקום לינה · אדווח ראשון</button></div>}
+            {status === 'ready' && places.length === 0 && <div className="card cta empty-area-cta"><h2>עוד אין מקומות לינה ברשימה</h2><p>לא נמצאו כאן לודג׳ים מהמפה או דיווחים קיימים. ישנת באזור? אפשר להוסיף מקום ולדווח מחיר.</p><button className="btn primary block big" onClick={() => loggedIn ? setReporting('manual') : (setLoginWhy('report'), setLoginPop(true))}>הוסף מקום ודווח מחיר</button></div>}
             {status === 'ready' && places.length > 0 && <>
               <div className="seg filter">
                 <button className={!onlyKnown ? 'on' : ''} onClick={() => setOnlyKnown(false)}>הכל ({places.length})</button>
                 <button className={onlyKnown ? 'on' : ''} onClick={() => setOnlyKnown(true)}>עם מחירים ({knownCount})</button>
               </div>
               <div className="room-filters"><label>מיטות בחדר<select disabled={!filtersReady} value={bedsFilter ?? ''} onChange={e => setBedsFilter(e.target.value ? Number(e.target.value) : null)}><option value="">כל מספר</option>{Array.from({ length: 20 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}</select></label>{region && <label className="deal-filter"><input type="checkbox" disabled={!filtersReady} checked={dealFilter} onChange={e => setDealFilter(e.target.checked)} />הדיל הישראלי</label>}{!filtersReady && <span className="muted small">{pricesLoading ? 'טוען מסננים…' : 'אין דיווחים לסנן באזור הזה.'}</span>}</div>
-              {onlyKnown && !knownCount && <p className="muted center">עוד אין מחירים באזור. תהיה הראשון לדווח!</p>}
+              {onlyKnown && !knownCount && <p className="muted center">עוד אין דיווחי מחיר באזור הזה.</p>}
               {filterActive && !shown.length && <p className="muted center">אין דיווחים שמתאימים למסננים האלה.</p>}
               <ul className="places">{shown.map((p, i) => { const n = filterActive ? (listFeatures[p.id] ?? []).filter(([beds, israeli_deal]) => matchesRoomDeal({ beds, israeli_deal }, bedsFilter, dealFilter)).length : counts[p.id] ?? 0; return <li key={p.id} style={{ ['--i' as any]: Math.min(i, 12) }}><button className="card place" onClick={() => openPlace(p)}>
                 <Thumb place={p} photo={photoFor(p)} />
