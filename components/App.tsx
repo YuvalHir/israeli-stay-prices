@@ -9,6 +9,8 @@ import { ROOM_HE, KIND_ICON, curFlag, money, dist, median, monthLabel, lastMonth
 import { placePath, SITE_URL } from '@/lib/placeUrl';
 import { BOOT_HTML, BOOT_JS } from '@/lib/boot';
 import { trekDealRegion, matchesRoomDeal } from '@/lib/trekDeal';
+import { clearOfflinePacks } from '@/lib/offlinePack';
+import { clearPendingReports, syncPendingReports } from '@/lib/offlineReports';
 
 export type { Photo };
 export type InitialPlace = Place & { locality?: string; region?: string; reports?: number; photo?: Photo | null };
@@ -24,6 +26,7 @@ const ShareSheet = dynamic(() => import('@/components/Extras').then(m => m.Share
 const InstallSheet = dynamic(() => import('@/components/Extras').then(m => m.InstallSheet), { ssr: false });
 const AccountSheet = dynamic(() => import('@/components/Extras').then(m => m.AccountSheet), { ssr: false });
 const StayMap = dynamic(() => import('@/components/StayMap'), { ssr: false, loading: () => <div className="map map-loading">טוען מפה…</div> });
+const OfflineTreks = dynamic(() => import('@/components/OfflineTreks'), { ssr: false });
 
 
 function GitHubIcon() {
@@ -79,7 +82,8 @@ function LoginNote({ onMore }: { onMore: () => void }) {
 
 const PRIVACY_ITEMS: [string, string, string][] = [
   ['👤', 'מגוגל', 'שם, מייל ומזהה החשבון בגוגל. לא תמונת פרופיל.'],
-  ['💬', 'דיווחים והצבעות', 'מחיר, סוג חדר, מספר מיטות, סימון הדיל הישראלי (אם נבחר), לילות, חודש והערה. מקושרים לחשבון כדי למנוע כפילויות, ומוצגים בלי שם.'],
+  ['💬', 'דיווחים והצבעות', 'מחיר, סוג חדר, מספר מיטות, סימון הדיל הישראלי (אם נבחר), לילות, חודש והערה. מקושרים לחשבון כדי למנוע כפילויות, ומוצגים בלי שם. דיווח אופליין נשמר במכשיר עד שנשלח.'],
+  ['🏔️', 'מסלולים שמורים', 'רשימות עצירות ומחירים נשמרות במכשיר; האתר שומר מזהה מסלול, טביעת רשימת העצירות ומשך הטרק, ומועד פקיעת החיפוש כדי לספור חיפוש אחד למסלול.'],
   ['📍', 'אזורים שחיפשת', 'המיקום והשעה של כל חיפוש עם מחירים, כדי לספור את 5 החיפושים.'],
   ['🎟️', 'הזמנות', 'מי הזמין אותך, והקישורים שיצרת ומי הצטרף דרכם.'],
   ['⚙️', 'פרטי חשבון', 'תאריך ההרשמה, והגדרות כמו חשבון מנהל או חסימה.'],
@@ -121,6 +125,11 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const [picker, setPicker] = useState(false);
   const [bootOn, setBootOn] = useState(true); // the pre-React search box (lib/boot.ts)
   const [onlyKnown, setOnlyKnown] = useState(false);
+  const [offlineOpen, setOfflineOpen] = useState(false);
+  const [offlineOwner, setOfflineOwner] = useState<string | null>(null);
+  const [online, setOnline] = useState(true);
+  useEffect(() => { const update = () => { setOnline(navigator.onLine); setOfflineOwner(!navigator.onLine ? localStorage.getItem('sp_offline_owner') : null); }; update(); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); }; }, []);
+  useEffect(() => { const sync = () => syncPendingReports().then(r => { if (r.sent) say(`${r.sent} דיווחים מהאופליין עלו לאתר.`); }).catch(() => {}); window.addEventListener('online', sync); if (navigator.onLine) sync(); return () => window.removeEventListener('online', sync); }, []);
   const [ipCountry, setIpCountry] = useState<string | null>(null);
   const [rates, setRates] = useState<Record<string, number> | null>(null);
   const [disp, setDisp] = useState<Disp>('local');
@@ -229,7 +238,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     setToastOut(false); setToast(m);
     toastTimers.current.push(setTimeout(() => hideToast(m), 4200));
   };
-  const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then((m: Me) => { setMe(m); try { localStorage.setItem('sp_me_hint', JSON.stringify(m.user ? { n: (m.user.name ?? m.user.email ?? '?').trim()[0] } : {})); if (m.user) { localStorage.setItem('sp_member', '1'); setCanJoin(true); } } catch {} return m; }).catch(() => { const m = { user: null }; setMe(m); return m as Me; });
+  const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then((m: Me) => { setMe(m); try { localStorage.setItem('sp_me_hint', JSON.stringify(m.user ? { n: (m.user.name ?? m.user.email ?? '?').trim()[0] } : {})); if (m.user) { localStorage.setItem('sp_offline_owner', m.user.email); localStorage.setItem('sp_member', '1'); setCanJoin(true); } } catch {} return m; }).catch(() => { const m = { user: null }; setMe(m); return m as Me; });
   const loadListPrices = (list: Place[], sid: string | null) => {
     if (!list.length) return Promise.resolve();
     return fetch(`/api/reports?placeIds=${encodeURIComponent(list.map(p => p.id).join(','))}${sid ? `&searchId=${sid}` : ''}`)
@@ -434,7 +443,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     }, () => setSleepPick({ status: 'error', places: [], msg: 'לא קיבלתי מיקום. אפשר לאשר מיקום בהגדרות הדפדפן, או לדווח ידנית.' }),
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
   };
-  const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); setSearchId(null); setListPrices({}); setListFeatures({}); refreshMe(); };
+  const logout = async () => { localStorage.removeItem('sp_offline_owner'); setOfflineOwner(null); await clearPendingReports().catch(() => {}); await clearOfflinePacks().catch(() => {}); setOfflineOpen(false); await fetch('/api/auth/logout', { method: 'POST' }); setSearchId(null); setListPrices({}); setListFeatures({}); refreshMe(); };
 
   const rs = openState.reports ?? [];
   const filteredReports = rs.filter(r => matchesRoomDeal(r, bedsFilter, dealFilter));
@@ -640,6 +649,8 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       <main className="wrap">
         {bootOn && <><div id="boot" suppressHydrationWarning dangerouslySetInnerHTML={{ __html: BOOT_HTML }} /><script dangerouslySetInnerHTML={{ __html: BOOT_JS }} /></>}
         {(picker || status === 'error') && <section className="card"><h2>לאן?</h2>{Picker}</section>}
+        <button className="btn block" onClick={() => setOfflineOpen(!offlineOpen)}>🏔️ {offlineOpen ? 'סגור מסלולים שמורים' : 'מסלולים שמורים לאופליין'}</button>
+        {offlineOpen && <OfflineTreks loggedIn={loggedIn || (!online && !!offlineOwner)} owner={me?.user?.email ?? (!online ? offlineOwner : null)} searchesLeft={me?.searchesLeft ?? 0} onCreditChange={n => setMe(x => x ? { ...x, searchesLeft: n } : x)} />}
         <h2 className="section-title">איך זה עובד</h2>
         <section className="steps">
           {[
@@ -664,7 +675,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     : <>
       <Header />
       <main className="wrap app">
-        {reporting ? <ReportForm place={reporting === 'manual' ? null : reporting} area={area?.name ?? ''} areaLat={area?.lat} areaLon={area?.lon} country={reportCountry} onDone={afterReport} onCancel={() => setReporting(null)} />
+        {reporting ? <ReportForm place={reporting === 'manual' ? null : reporting} area={area?.name ?? ''} areaLat={area?.lat} areaLon={area?.lon} country={reportCountry} owner={me?.user?.email ?? (!online ? offlineOwner : null)} onDone={afterReport} onCancel={() => setReporting(null)} />
 
         : open ? <section className="detail">
             <div className="detail-top">
@@ -708,16 +719,18 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
               </div>
             : <>
                 {filterActive && !filteredReports.length && <div className="card cta">אין כאן עדיין דיווח שמתאים למסננים. אפשר לשנות אותם ברשימת האזור.</div>}
-                {summary && <div className="card price-card">
-                  <span className="muted small">חציון ללילה</span>
+                {summary && new Set(filteredReports.map(r => r.room)).size === 1 && <div className="card price-card">
+                  <span className="muted small">חציון ללילה · {filteredReports[0]?.room === 'dorm' ? 'למיטה בדורם' : 'לכל החדר*'}</span>
                   <div className="big-price"><PriceTag amount={summary.med} cur={summary.cur} roll /></div>
                   <div className="muted small">{summary.cur !== dispCur ? 'אין שער המרה כרגע · ' : ''}{summary.n === 1 ? 'דיווח אחד' : `${summary.n} דיווחים`}{summary.n > 1 ? ` · טווח ${money(summary.min, summary.cur)} – ${money(summary.max, summary.cur)}` : ''}</div>
                 </div>}
+                {summary && new Set(filteredReports.map(r => r.room)).size > 1 && <p className="muted small">יש כאן מחירים לחדרים ולמיטות בדורם. מוצגים הדיווחים בנפרד כדי לא לערבב ביניהם.</p>}
                 <ul className="reports">{filteredReports.map(r => { const c = conv(r.price, r.currency); const same = r.currency === dispCur || c == null; return <li key={r.id} className="card report">
                   <div className="report-top">
-                    <b className="report-price">{r.israeli_deal ? 'לינה חינם*' : same ? <PriceTag amount={r.price} cur={r.currency} /> : <PriceTag amount={c!} cur={dispCur} approx />} <span className="muted small">ללילה</span></b>
+                    <b className="report-price">{r.israeli_deal ? 'לינה חינם*' : same ? <PriceTag amount={r.price} cur={r.currency} /> : <PriceTag amount={c!} cur={dispCur} approx />} <span className="muted small">{r.room === 'private' ? 'ללילה*' : 'למיטה ללילה'}</span></b>
                     <span className="muted small">{monthLabel(r.stay_month)}</span>
                   </div>
+                  {r.room === 'private' && <p className="muted small per-person-note">* המחיר ללילה לכל החדר{r.beds && !r.israeli_deal ? ` · ${money(Math.round(r.price / r.beds * 100) / 100, r.currency)} לאדם בחדר מלא (${r.beds} מיטות)` : ''}</p>}
                   <div className="muted small">{ROOM_HE[r.room]}{r.beds ? ` · ${r.beds} מיטות בחדר` : ''}{r.israeli_deal ? ' · הדיל הישראלי' : ''}{r.nights > 1 ? ` · ${r.nights} לילות` : ''}{!same && !r.israeli_deal ? ` · שולם ${money(r.price, r.currency)}` : ''}</div>
                   {!!r.israeli_deal && <p className="muted small deal-caption">* הלינה בחינם בתנאי שאוכלים בוקר וערב בלודג׳. הארוחות בתשלום.</p>}
                   {r.note && <p className="report-note">{r.note}</p>}
@@ -747,6 +760,8 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             </div>
             {gate ? <div className={`gate ${gate.ok ? 'ok' : ''} ${'wait' in gate ? 'wait' : ''}`}>{'wait' in gate ? '' : gate.ok ? '🔓 ' : '🎟️ '}{gate.t}</div> : <div className="gate gate-slot" aria-hidden="true">&nbsp;</div>}
             <button className="btn sleep block" onClick={sleepHere}>😴 אני ישן כאן עכשיו · דיווח ב-10 שניות</button>
+            <button className="btn block" onClick={() => setOfflineOpen(!offlineOpen)}>🏔️ {offlineOpen ? 'סגור מסלולים שמורים' : 'מסלולים שמורים לאופליין'}</button>
+            {offlineOpen && <OfflineTreks loggedIn={loggedIn || (!online && !!offlineOwner)} owner={me?.user?.email ?? (!online ? offlineOwner : null)} searchesLeft={me?.searchesLeft ?? 0} onCreditChange={n => setMe(x => x ? { ...x, searchesLeft: n } : x)} />}
             {picker && <div className="card">{Picker}</div>}
             {area && <StayMap center={area} places={places} counts={counts} me={myPos} onSelect={openPlace} />}
             {message && <p className="muted">{message}</p>}

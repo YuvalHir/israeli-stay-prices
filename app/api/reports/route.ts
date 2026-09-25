@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
   const price = typeof b.price === 'number' ? b.price : Number(b.price);
   const currency = str(b.currency, 3), room = str(b.room, 10);
   const israeliDeal = b.israeliDeal === true;
+  const clientReportId = typeof b.clientReportId === 'string' && /^[a-f0-9-]{36}$/i.test(b.clientReportId) ? b.clientReportId : null;
   const beds = b.beds == null || b.beds === '' ? null : b.beds;
   if (beds !== null && (typeof beds !== 'number' || !Number.isInteger(beds) || beds < 1 || beds > 20)) return badRequest();
   let placeName = str(b.placeName, 120);
@@ -102,6 +103,10 @@ export async function POST(req: NextRequest) {
 
   if (israeliDeal && !trekDealRegion(lat, lon)) return badRequest();
   const { DB } = e;
+  if (clientReportId) {
+    const prior = await DB.prepare('SELECT id FROM reports WHERE user_id = ? AND client_report_id = ?').bind(user.id, clientReportId).first();
+    if (prior) return NextResponse.json({ ok: true, duplicate: true, ...(await creditState(DB, user.id, !!user.is_admin)) });
+  }
   const lim = await DB.prepare(
     `SELECT (SELECT COUNT(*) FROM reports WHERE user_id = ?1 AND created_at >= datetime('now', '-1 day')) AS today,
             (SELECT COUNT(*) FROM reports WHERE user_id = ?1 AND place_id = ?2 AND stay_month = ?3) AS same`,
@@ -109,9 +114,9 @@ export async function POST(req: NextRequest) {
   if (!user.is_admin && (lim?.same ?? 0) > 0) return NextResponse.json({ error: 'duplicate' }, { status: 409 });
   if (!user.is_admin && (lim?.today ?? 0) >= REPORTS_PER_DAY) return NextResponse.json({ error: 'daily_limit' }, { status: 429 });
   await DB.prepare(
-    `INSERT INTO reports (id, user_id, place_id, place_name, place_kind, lat, lon, area, country, price, currency, room, nights, stay_month, note, beds, israeli_deal)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(crypto.randomUUID(), user.id, placeId, placeName, kind, lat, lon, area, country, price, currency, room, nights, month, note, beds, israeliDeal ? 1 : 0).run();
+    `INSERT INTO reports (id, user_id, place_id, place_name, place_kind, lat, lon, area, country, price, currency, room, nights, stay_month, note, beds, israeli_deal, client_report_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(crypto.randomUUID(), user.id, placeId, placeName, kind, lat, lon, area, country, price, currency, room, nights, month, note, beds, israeliDeal ? 1 : 0, clientReportId).run();
   await countEvent(DB, 'report_sent');
   return NextResponse.json({ ok: true, ...(await creditState(DB, user.id, !!user.is_admin)) });
 }

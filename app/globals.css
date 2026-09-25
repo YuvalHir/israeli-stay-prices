@@ -552,3 +552,25 @@ button.adm-pill { cursor: pointer; }
 .room-filters label { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
 .room-filters select { min-height: 40px; border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 6px 10px; }
 .room-filters .deal-filter { min-height: 40px; }
+.offline-panel h2 { margin: 0 0 8px; }
+.offline-row { justify-content: space-between; text-align: right; flex-wrap: wrap; }
+.offline-row span { color: var(--ink2); font-size: 13px; }
+.offline-stops details { border-top: 1px solid var(--line); padding: 12px 0; }
+.offline-stops summary { cursor: pointer; font-weight: 600; }
+.offline-stops ul { padding-inline-start: 22px; }
+.offline-chosen { border-color: var(--teal); background: var(--teal-soft); }
+.offline-panel details { border-top: 1px solid var(--line); padding: 10px 0; }
+.offline-panel summary { cursor: pointer; font-weight: 600; }
+.offline-edit { padding-top: 16px; }
+.offline-edit ol { padding-inline-start: 22px; }
+.offline-edit li { padding: 6px 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.offline-add { display: flex; gap: 8px; }
+.offline-add input { min-width: 0; flex: 1; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
+.offline-add .btn { flex: none; }
+
+.offline-panel { margin: 16px 0 24px; }
+.offline-panel .offline-pending { margin: 16px 0; padding: 12px; background: var(--sand); border-radius: 14px; }
+.offline-pending-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.offline-stops li { padding: 8px 0; line-height: 1.6; overflow-wrap: anywhere; }
+.offline-stops li .chip { margin-inline-start: 8px; }
+.per-person-note { margin: 4px 0; }

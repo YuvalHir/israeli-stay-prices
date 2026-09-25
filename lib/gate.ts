@@ -16,7 +16,7 @@ export async function creditState(DB: D1Database, userId: string, isAdmin = fals
   const r = await DB.prepare(
     `SELECT (SELECT COUNT(*) FROM reports WHERE user_id = ?1) AS reports,
             (SELECT COUNT(*) FROM report_votes v JOIN reports r ON r.id = v.report_id WHERE v.user_id = ?1 AND v.vote = 1 AND r.user_id <> ?1) AS likes,
-            (SELECT COUNT(*) FROM searches WHERE user_id = ?1) AS used`,
+            ((SELECT COUNT(*) FROM searches WHERE user_id = ?1) + (SELECT COUNT(*) FROM offline_route_searches WHERE user_id = ?1)) AS used`,
   ).bind(userId).first<{ reports: number; likes: number; used: number }>();
   const reports = r?.reports ?? 0, likes = r?.likes ?? 0, used = r?.used ?? 0;
   // Admins have unlimited searches.

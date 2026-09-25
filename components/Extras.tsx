@@ -8,8 +8,9 @@ import { kindLabel, type Place } from '@/lib/places';
 import { currencyFor, currencyName } from '@/lib/currency';
 import { SITE_URL } from '@/lib/placeUrl';
 import { trekDealRegion } from '@/lib/trekDeal';
+import { queueReport } from '@/lib/offlineReports';
 
-export function ReportForm({ place, area, areaLat, areaLon, country, onDone, onCancel }: { place: Place | null; area: string; areaLat?: number; areaLon?: number; country: string | null; onDone: (msg: string, share?: ShareInfo) => void; onCancel: () => void }) {
+export function ReportForm({ place, area, areaLat, areaLon, country, owner, onDone, onCancel }: { place: Place | null; area: string; areaLat?: number; areaLon?: number; country: string | null; owner: string | null; onDone: (msg: string, share?: ShareInfo) => void; onCancel: () => void }) {
   const local = currencyFor(country);
   const options = Array.from(new Set([local, 'USD', 'ILS']));
   const [name, setName] = useState(place?.name ?? '');
@@ -31,10 +32,16 @@ export function ReportForm({ place, area, areaLat, areaLon, country, onDone, onC
     if (!israeliDeal && !(p > 0)) return setError('חסר מחיר ללילה.');
     if (!beds) return setError('חסר מספר המיטות בחדר.');
     setBusy(true); setError('');
-    const res = await fetch('/api/reports', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ placeId: place?.id, placeName: name, placeKind: place?.kind, lat: place?.lat ?? areaLat, lon: place?.lon ?? areaLon, area, country, price: p, currency, room, beds, israeliDeal, nights, stayMonth: month, note }),
-    });
+    const body = { clientReportId: crypto.randomUUID(), placeId: place?.id, placeName: name, placeKind: place?.kind, lat: place?.lat ?? areaLat, lon: place?.lon ?? areaLon, area, country, price: p, currency, room, beds, israeliDeal, nights, stayMonth: month, note };
+    if (!navigator.onLine) {
+      if (!owner) { setBusy(false); setError('כדי לשמור דיווח אופליין צריך להתחבר כשיש רשת.'); return; }
+      try { await queueReport(body, owner); setBusy(false); onDone('הדיווח נשמר רק במכשיר ויעלה אוטומטית כשיהיה אינטרנט. עדיין לא קיבלת חיפושים.'); }
+      catch { setBusy(false); setError('לא הצלחתי לשמור במכשיר. בדוק מקום פנוי ונסה שוב.'); }
+      return;
+    }
+    let res: Response;
+    try { res = await fetch('/api/reports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
+    catch { if (owner) { try { await queueReport(body, owner); setBusy(false); onDone('החיבור התנתק. שמרנו את הדיווח במכשיר עם אותו מזהה, והוא ייבדק שוב כשיהיה אינטרנט.'); return; } catch {} } setBusy(false); setError('החיבור התנתק ולא הצלחנו לשמור במכשיר. בדוק כשיש חיבור לפני שתשלח שוב.'); return; }
     if (!res.ok) { setBusy(false); return setError(res.status === 401 ? 'צריך להתחבר קודם.' : res.status === 409 ? 'כבר דיווחת על המקום הזה לחודש הזה. אפשר לדווח שוב על חודש אחר.' : res.status === 429 ? 'הגעת למגבלת הדיווחים להיום. נסה שוב מחר.' : 'השמירה לא הצליחה. נסה שוב.'); }
     setBusy(false); try { navigator.vibrate?.([12, 40, 18]); } catch {} onDone('תודה! הדיווח נשמר, וקיבלת 5 חיפושים עם מחירים.', { placeName: name.trim(), price: p, currency, country, room, beds, israeliDeal, nights, month, lat: place?.lat ?? areaLat, lon: place?.lon ?? areaLon });
   };
@@ -42,7 +49,7 @@ export function ReportForm({ place, area, areaLat, areaLon, country, onDone, onC
     <div className="form-head"><button className="icon-btn" onClick={onCancel} aria-label="חזרה">→</button><div><h2>איך הייתה הלינה?</h2><p className="muted small form-sub">{SLOGAN} 😉</p></div></div>
     {place ? <p className="muted">{KIND_ICON[place.kind] ?? '🏠'} {place.name} · {kindLabel(place.kind)}</p> :
       <label className="field"><span>שם המקום</span><input value={name} onChange={e => setName(e.target.value)} placeholder="למשל Hotel Yog" /></label>}
-    {!israeliDeal && <><label className="field"><span>מחיר ללילה</span>
+    {!israeliDeal && <><label className="field"><span>{room === 'dorm' ? 'מחיר למיטה ללילה' : 'מחיר לחדר ללילה'}</span>
       <div className="price-input"><input inputMode="decimal" dir="ltr" autoFocus={!!place} value={price} onChange={e => setPrice(e.target.value)} placeholder="0" /><b>{curFlag(currency, country)} {currency}</b></div>
     </label>
     <div className="field"><span>מטבע</span>

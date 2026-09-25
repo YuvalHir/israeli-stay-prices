@@ -4,7 +4,8 @@
 // - OSM map tiles and Wikimedia photos: cache-first, capped, so places you've seen load instantly
 // - place lookups (Photon/OSM): network with a 4s timeout, then the last answer, so areas you opened work offline
 // - /api/* is never cached: prices and sign-in must be live.
-const V = 'v3';
+// - same-origin versioned code chunks are cached so the saved-route UI opens after an offline reload.
+const V = 'v4';
 const SHELL = `sp-shell-${V}`, STATIC = `sp-static-${V}`, MEDIA = `sp-media-${V}`, DATA = `sp-data-${V}`;
 const KEEP = [SHELL, STATIC, MEDIA, DATA];
 // Small on purpose: the first visit may be on 2G. Big icons are fetched by the OS only when installing.
