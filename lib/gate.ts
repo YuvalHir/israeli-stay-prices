@@ -11,8 +11,6 @@ export const SEARCHES_PER_CREDIT = 5;
 export const SEARCH_TTL_HOURS = 12;
 export const SEARCH_RADIUS_KM = 8;
 export const ANON_COOKIE = 'sp_anon';
-/** Distinct places one network (IP) may open for free per day. Higher than 3 because hostel Wi-Fi and mobile carriers share IPs. */
-export const ANON_IP_DAILY = 6;
 
 export async function creditState(DB: D1Database, userId: string, isAdmin = false) {
   const r = await DB.prepare(

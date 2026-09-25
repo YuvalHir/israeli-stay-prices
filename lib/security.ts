@@ -1,4 +1,4 @@
-/** Shared request guards: safe JSON parsing, per-IP rate limits, hashed IP keys, server-side place location. */
+/** Shared request guards: safe JSON parsing, per-IP rate limits, server-side place location. */
 import { NextRequest, NextResponse } from 'next/server';
 import { nominatimLookup } from './placeLookup';
 
@@ -23,13 +23,6 @@ export function sameOrigin(req: NextRequest, appUrl: string) {
 
 // Cloudflare sets CF-Connecting-IP itself and overwrites any client-sent value, so it can't be spoofed. X-Forwarded-For is not trusted.
 export const clientIp = (req: NextRequest) => req.headers.get('cf-connecting-ip') ?? '0.0.0.0';
-
-/** HMAC of IP + day. Changes every day and can't be reversed without the server secret. */
-export async function ipDayHash(req: NextRequest, secret: string, day = new Date().toISOString().slice(0, 10)) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret || 'no-secret'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${clientIp(req)}|${day}`));
-  return Array.from(new Uint8Array(sig).slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 /** Cloudflare Rate Limiting binding (per IP + bucket). Missing binding (local dev) = allowed. */
 export async function rateLimited(e: CloudflareEnv, req: NextRequest, bucket: string, which: 'RL_API' | 'RL_WRITE' = 'RL_API') {

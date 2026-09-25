@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { env } from '@/lib/env';
-import { ANON_IP_DAILY, ANON_VIEWS, anonId, searchCovers } from '@/lib/gate';
-import { badRequest, ipDayHash, placeLocation, rateLimited, readJson, tooMany } from '@/lib/security';
+import { ANON_VIEWS, anonId, searchCovers } from '@/lib/gate';
+import { badRequest, placeLocation, rateLimited, readJson, tooMany } from '@/lib/security';
 
 // Prices for one place.
-// Visitors: 3 places per browser session (and a few per network per day), then login.
+// Visitors: 3 places per browser session (cookie), then login.
 // Signed-in users: need an active search whose circle contains the place's server-known location.
 export async function POST(req: NextRequest) {
   const e = await env();
@@ -21,20 +21,12 @@ export async function POST(req: NextRequest) {
 
   if (!user) {
     const id = (await anonId(true))!;
-    const day = new Date().toISOString().slice(0, 10);
-    const ip = await ipDayHash(req, e.GOOGLE_CLIENT_SECRET, day);
     const s = await DB.prepare(
-      `SELECT (SELECT COUNT(*) FROM anon_views WHERE anon_id = ?1) AS views, (SELECT COUNT(*) FROM anon_views WHERE anon_id = ?1 AND place_id = ?2) AS seen,
-              (SELECT COUNT(*) FROM anon_ip_views WHERE ip_hash = ?3 AND day = ?4) AS ipViews, (SELECT COUNT(*) FROM anon_ip_views WHERE ip_hash = ?3 AND day = ?4 AND place_id = ?2) AS ipSeen`,
-    ).bind(id, placeId, ip, day).first<{ views: number; seen: number; ipViews: number; ipSeen: number }>();
-    const seen = !!s?.seen || !!s?.ipSeen;
-    if (!seen && ((s?.views ?? 0) >= ANON_VIEWS || (s?.ipViews ?? 0) >= ANON_IP_DAILY)) return NextResponse.json({ error: 'login_required' }, { status: 401 });
-    if (!seen) await DB.batch([
-      DB.prepare('INSERT OR IGNORE INTO anon_views (anon_id, place_id) VALUES (?, ?)').bind(id, placeId),
-      DB.prepare('INSERT OR IGNORE INTO anon_ip_views (ip_hash, day, place_id) VALUES (?, ?, ?)').bind(ip, day, placeId),
-    ]);
-    if (Math.random() < 0.02) await DB.prepare(`DELETE FROM anon_ip_views WHERE day < date('now', '-1 day')`).run();
-    anonLeft = Math.max(0, Math.min(ANON_VIEWS - (s?.views ?? 0), ANON_IP_DAILY - (s?.ipViews ?? 0)) - (seen ? 0 : 1));
+      `SELECT (SELECT COUNT(*) FROM anon_views WHERE anon_id = ?1) AS views, (SELECT COUNT(*) FROM anon_views WHERE anon_id = ?1 AND place_id = ?2) AS seen`,
+    ).bind(id, placeId).first<{ views: number; seen: number }>();
+    if (!s?.seen && (s?.views ?? 0) >= ANON_VIEWS) return NextResponse.json({ error: 'login_required' }, { status: 401 });
+    if (!s?.seen) await DB.prepare('INSERT OR IGNORE INTO anon_views (anon_id, place_id) VALUES (?, ?)').bind(id, placeId).run();
+    anonLeft = Math.max(0, ANON_VIEWS - (s?.views ?? 0) - (s?.seen ? 0 : 1));
   }
   const loc = await placeLocation(DB, placeId);
   if (user && !(await searchCovers(DB, user.id, searchId, loc?.lat, loc?.lon, !!user.is_admin))) {

@@ -235,7 +235,7 @@ const PRIVACY_ITEMS: [string, string, string][] = [
   ['📍', 'אזורים שחיפשת', 'המיקום והשעה של כל חיפוש עם מחירים, כדי לספור את 5 החיפושים.'],
   ['🎟️', 'הזמנות', 'מי הזמין אותך, והקישורים שיצרת ומי הצטרף דרכם.'],
   ['⚙️', 'פרטי חשבון', 'תאריך ההרשמה, והגדרות כמו חשבון מנהל או חסימה.'],
-  ['🍪', 'צפיות חינם', 'עוגיית התחברות. מי שלא מחובר מקבל מזהה אקראי ורשימת המקומות שפתח, כדי לספור 3 צפיות חינם. כדי שאי אפשר יהיה לעקוף את זה, נשמר גם קוד חד-כיווני של הרשת (לא כתובת ה-IP עצמה), שמתחלף כל יום ונמחק אחרי יומיים.'],
+  ['🍪', 'עוגיות', 'עוגיית התחברות. מי שלא מחובר מקבל מזהה אקראי ורשימת המקומות שפתח, כדי לספור 3 צפיות חינם.'],
   ['📊', 'סטטיסטיקה', 'ספירה יומית אנונימית של פעולות באתר, ו-Cloudflare Web Analytics בלי עוגיות.'],
 ];
 
@@ -787,7 +787,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     {privacy && <Sheet onClose={() => setPrivacy(false)} className="privacy-sheet">{dismiss => <>
         <h2>מה אנחנו שומרים</h2>
         <ul className="privacy-list">{PRIVACY_ITEMS.map(([i, t, b]) => <li key={t}><span aria-hidden="true">{i}</span><p><b>{t}</b>{b}</p></li>)}</ul>
-        <p className="muted small">כתובות IP עצמן לא נשמרות, ושום דבר לא נמכר.</p>
+        <p className="muted small">כתובות IP לא נשמרות, ושום דבר לא נמכר.</p>
         <p className="muted small">לא מאמינים? בדקו את <a href="https://github.com/YuvalHir/israeli-stay-prices" target="_blank" rel="noopener" className="linkish">הקוד</a> שלנו</p>
         <button className="btn primary block" onClick={dismiss}>הבנתי</button>
       </>}</Sheet>}
