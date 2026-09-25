@@ -30,7 +30,7 @@ export async function nominatimLookup(ids: string[]): Promise<Record<string, Omi
 
 export async function getPlace(id: string): Promise<PlaceInfo | null> {
   const { DB } = await env();
-  const agg = await DB.prepare(`SELECT MAX(place_name) AS name, MAX(place_kind) AS kind, AVG(lat) AS lat, AVG(lon) AS lon, MAX(country) AS country, MAX(area) AS area, COUNT(*) AS n FROM reports WHERE place_id = ?`)
+  const agg = await DB.prepare(`SELECT MAX(place_name) AS name, MAX(place_kind) AS kind, AVG(lat) AS lat, AVG(lon) AS lon, MAX(country) AS country, MAX(area) AS area, COUNT(*) AS n FROM reports WHERE place_id = ? AND hidden = 0`)
     .bind(id).first<{ name: string | null; kind: string | null; lat: number | null; lon: number | null; country: string | null; area: string | null; n: number }>();
   const reports = agg?.n ?? 0;
   if (id.startsWith('osm-')) {

@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     const { DB } = await env();
     const { results } = await DB.prepare(
       `SELECT place_id AS id, MAX(place_name) AS name, MAX(place_kind) AS kind, AVG(lat) AS lat, AVG(lon) AS lon, MAX(country) AS country, COUNT(*) AS n
-       FROM reports WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? GROUP BY place_id LIMIT 100`,
+       FROM reports WHERE hidden = 0 AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? GROUP BY place_id LIMIT 100`,
     ).bind(lat - dLat, lat + dLat, lon - dLon, lon + dLon).all();
     return NextResponse.json({ places: results });
   }
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   if (!ids.length) return NextResponse.json({ counts: {}, prices: {} });
   const { DB } = await env();
   const { results } = await DB.prepare(
-    `SELECT place_id, price, currency, lat, lon FROM reports WHERE place_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 2000`,
+    `SELECT place_id, price, currency, lat, lon FROM reports WHERE hidden = 0 AND place_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 2000`,
   ).bind(...ids).all<{ place_id: string; price: number; currency: string; lat: number | null; lon: number | null }>();
   // Prices only for signed-in users with an active search; everyone else sees counts.
   const user = await currentUser();
@@ -43,6 +43,7 @@ type Body = {
 export async function POST(req: NextRequest) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: 'login_required' }, { status: 401 });
+  if (user.banned) return NextResponse.json({ error: 'blocked' }, { status: 403 });
   const b = await req.json() as Body;
   const price = Number(b.price);
   if (!b.placeName?.trim() || !(price > 0) || price > 10_000_000 ||

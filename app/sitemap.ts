@@ -9,7 +9,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const home = { url: SITE_URL + '/', changeFrequency: 'daily' as const, priority: 1 };
   try {
     const { DB } = await env();
-    const { results } = await DB.prepare(`SELECT place_id AS id, MAX(place_name) AS name, MAX(created_at) AS updated FROM reports GROUP BY place_id ORDER BY MAX(created_at) DESC LIMIT 45000`)
+    const { results } = await DB.prepare(`SELECT place_id AS id, MAX(place_name) AS name, MAX(created_at) AS updated FROM reports WHERE hidden = 0 GROUP BY place_id ORDER BY MAX(created_at) DESC LIMIT 45000`)
       .all<{ id: string; name: string; updated: string }>();
     return [home, ...results.map((r: { id: string; name: string; updated: string }) => ({ url: SITE_URL + placePath(r), lastModified: new Date(r.updated.replace(' ', 'T') + (r.updated.endsWith('Z') ? '' : 'Z')), changeFrequency: 'weekly' as const, priority: 0.7 }))];
   } catch { return [home]; }

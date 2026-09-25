@@ -4,7 +4,7 @@ import { env } from './env';
 export const SESSION_COOKIE = 'sp_session';
 const SESSION_DAYS = 60;
 
-export type User = { id: string; email: string; name: string | null; is_admin: number };
+export type User = { id: string; email: string; name: string | null; is_admin: number; banned?: number };
 
 export function randomToken(bytes = 32) {
   const a = new Uint8Array(bytes);
@@ -32,7 +32,7 @@ export async function currentUser(): Promise<User | null> {
   if (!token) return null;
   const { DB } = await env();
   const row = await DB.prepare(
-    `SELECT u.id, u.email, u.name, u.is_admin FROM sessions s JOIN users u ON u.id = s.user_id
+    `SELECT u.id, u.email, u.name, u.is_admin, u.banned FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.id = ? AND s.expires_at > ?`,
   ).bind(await sha256(token), new Date().toISOString()).first<User>();
   return row ?? null;

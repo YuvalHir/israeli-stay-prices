@@ -7,10 +7,11 @@ import { creditState } from '@/lib/gate';
 export async function POST(req: NextRequest) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: 'login_required' }, { status: 401 });
+  if (user.banned) return NextResponse.json({ error: 'blocked' }, { status: 403 });
   const { reportId, vote } = await req.json() as { reportId: string; vote: number };
   if (!reportId || ![1, -1, 0].includes(vote)) return NextResponse.json({ error: 'bad_request' }, { status: 400 });
   const { DB } = await env();
-  const r = await DB.prepare('SELECT user_id FROM reports WHERE id = ?').bind(reportId).first<{ user_id: string }>();
+  const r = await DB.prepare('SELECT user_id FROM reports WHERE id = ? AND hidden = 0').bind(reportId).first<{ user_id: string }>();
   if (!r) return NextResponse.json({ error: 'not_found' }, { status: 404 });
   if (r.user_id === user.id) return NextResponse.json({ error: 'own_report' }, { status: 400 });
   if (vote === 0) await DB.prepare('DELETE FROM report_votes WHERE report_id = ? AND user_id = ?').bind(reportId, user.id).run();

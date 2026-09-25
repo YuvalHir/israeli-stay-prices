@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
        (SELECT COUNT(*) FROM report_votes v WHERE v.report_id = r.id AND v.vote = 1) AS up,
        (SELECT COUNT(*) FROM report_votes v WHERE v.report_id = r.id AND v.vote = -1) AS down,
        (SELECT vote FROM report_votes v WHERE v.report_id = r.id AND v.user_id = ?) AS my_vote
-     FROM reports r WHERE r.place_id = ? OR (? <> '' AND lower(r.place_name) = ?)
+     FROM reports r WHERE r.hidden = 0 AND (r.place_id = ? OR (? <> '' AND lower(r.place_name) = ?))
      ORDER BY r.created_at DESC LIMIT 100`,
   ).bind(uid, uid, placeId, nameKey, nameKey).all();
   return NextResponse.json({ reports: results, anonLeft });
