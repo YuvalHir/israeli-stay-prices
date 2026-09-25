@@ -204,34 +204,66 @@ const STAY_TAGS = ['hotel', 'hostel', 'guest_house', 'motel', 'apartment', 'chal
  * One search box for everything: towns, neighbourhoods and stays ("namaste namche", "yog hostel kathmandu").
  * Local lists answer instantly and forgive typos; Photon (OSM, free, no key) fills in the rest.
  */
+/** Words that describe the kind of stay, not which one ("Hotel yog kathmandu" -> "yog kathmandu"). */
+const GENERIC = new Set(['hotel', 'hotels', 'hostel', 'hostels', 'lodge', 'lodges', 'guest', 'house', 'guesthouse', 'gh', 'inn', 'resort', 'motel', 'homestay', 'teahouse', 'the', 'in', 'at', 'near']);
+const KATHMANDU = { lat: 27.7172, lon: 85.324 };
+
+/** True when every key word appears (prefix or small typo) somewhere in the text. */
+function allTokens(tokens: string[], hay: string) {
+  const words = norm(hay).split(/[ ,\-()&/]+/).filter(Boolean);
+  return tokens.every(t => words.some(w => w.startsWith(t) || (t.length >= 4 && dist(t, w.slice(0, t.length + 1)) <= (t.length >= 6 ? 2 : 1))));
+}
+
+async function photon(q: string, tags: string[], bias: { lat: number; lon: number }, signal?: AbortSignal): Promise<any[]> {
+  try {
+    const t = tags.map(x => `&osm_tag=${x}`).join('');
+    const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=12&lang=en${t}&lat=${bias.lat}&lon=${bias.lon}&location_bias_scale=0.3`, { signal });
+    if (!r.ok) return [];
+    return (await r.json()).features ?? [];
+  } catch { return []; }
+}
+
+/**
+ * One search box for everything: towns, neighbourhoods and stays ("namaste namche", "Hotel yog kathmandu").
+ * Local lists answer instantly and forgive typos; Photon (OSM, free, no key) fills in the rest.
+ * Generic words like "hotel" are dropped, results must contain every key word, and nearby wins.
+ */
 export async function suggestPlaces(text: string, bias?: { lat: number; lon: number } | null, signal?: AbortSignal): Promise<Suggestion[]> {
   const q = norm(text);
   if (q.length < 2) return [];
-  const scored = [...HOODS, ...HE_PLACES].map(p => ({ p, s: Math.min(fuzzy(q, p.name), fuzzy(q, p.en)) })).filter(x => x.s < 9).sort((a, b) => a.s - b.s);
+  const words = q.split(/\s+/).filter(Boolean);
+  const keys = words.filter(w => !GENERIC.has(w));
+  const core = (keys.length ? keys : words).join(' ');
+  const saidStay = keys.length < words.length || keys.length > 1;
+  const scored = [...HOODS, ...HE_PLACES].map(p => ({ p, s: Math.min(fuzzy(core, p.name), fuzzy(core, p.en)) })).filter(x => x.s < 9).sort((a, b) => a.s - b.s);
   const local: Suggestion[] = scored.slice(0, 4).map(({ p }) => ({ name: p.name, lat: p.lat, lon: p.lon, country: p.country, sub: p.en, type: 'area' }));
-  let remote: Suggestion[] = [];
+  let remote: (Suggestion & { d: number; full: boolean })[] = [];
   if (!/[\u0590-\u05FF]/.test(text) || local.length === 0) {
-    try {
-      const b = bias ? `&lat=${bias.lat}&lon=${bias.lon}&location_bias_scale=0.3` : '';
-      const tags = ['place', ...STAY_TAGS.map(t => `tourism:${t}`)].map(t => `&osm_tag=${t}`).join('');
-      const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&limit=12&lang=en${tags}${b}`, { signal });
-      if (r.ok) {
-        const j = await r.json();
-        remote = (j.features ?? []).filter((f: any) => f.properties?.name).map((f: any): Suggestion => {
-          const pr = f.properties; const stay = pr.osm_key === 'tourism';
-          const town = pr.city || pr.town || pr.village || pr.district || pr.county;
-          const ot = ({ N: 'node', W: 'way', R: 'relation' } as Record<string, string>)[pr.osm_type];
-          return stay
-            ? { type: 'stay', name: pr.name, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], country: pr.countrycode?.toUpperCase(), kind: pr.osm_value, city: town, placeId: ot ? `osm-${ot}-${pr.osm_id}` : undefined, sub: [town, pr.country].filter(Boolean).join(', ') }
-            : { type: 'area', name: pr.name, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], country: pr.countrycode?.toUpperCase(), sub: [pr.osm_value === 'city' ? null : town, pr.state, pr.country].filter(Boolean).join(', ') };
-        }).filter((x: Suggestion) => x.type === 'area' || x.placeId);
-      }
-    } catch { /* offline or aborted */ }
+    const b = bias ?? KATHMANDU;
+    const [st, pl] = await Promise.all([
+      photon(core, STAY_TAGS.map(t => `tourism:${t}`), b, signal),
+      keys.length ? photon(core, ['place'], b, signal) : Promise.resolve([]),
+    ]);
+    const tokens = (keys.length ? keys : words).filter(t => t.length >= 2);
+    remote = [...st, ...pl].filter((f: any) => f.properties?.name).map((f: any) => {
+      const pr = f.properties; const stay = pr.osm_key === 'tourism';
+      const town = pr.city || pr.town || pr.village || pr.district || pr.county;
+      const ot = ({ N: 'node', W: 'way', R: 'relation' } as Record<string, string>)[pr.osm_type];
+      const [lon, lat] = f.geometry.coordinates;
+      const full = allTokens(tokens, [pr.name, town, pr.county, pr.state, pr.country].filter(Boolean).join(' '));
+      const base = stay
+        ? { type: 'stay' as const, name: pr.name, lat, lon, country: pr.countrycode?.toUpperCase(), kind: pr.osm_value, city: town, placeId: ot ? `osm-${ot}-${pr.osm_id}` : undefined, sub: [town, pr.country].filter(Boolean).join(', ') }
+        : { type: 'area' as const, name: pr.name, lat, lon, country: pr.countrycode?.toUpperCase(), sub: [pr.osm_value === 'city' ? null : town, pr.state, pr.country].filter(Boolean).join(', ') };
+      return { ...base, d: km(b.lat, b.lon, lat, lon), full };
+    }).filter(x => x.type === 'area' || x.placeId)
+      // Keep results that contain every key word; partial matches only if they are close by.
+      .filter(x => x.full || x.d < 300)
+      .sort((a, c) => (Number(c.full) - Number(a.full)) || (a.d - c.d));
   }
   const seen = new Set<string>();
-  const all = [...local, ...remote].filter(s => { const k = `${s.type}:${s.lat.toFixed(s.type === 'stay' ? 4 : 2)},${s.lon.toFixed(s.type === 'stay' ? 4 : 2)}`; if (seen.has(k)) return false; seen.add(k); return true; });
-  // Stays first when the query names one (several words, or Photon returned stays at the top); otherwise places first.
+  const all: Suggestion[] = [...local, ...remote].filter(s => { const k = `${s.type}:${s.lat.toFixed(s.type === 'stay' ? 4 : 2)},${s.lon.toFixed(s.type === 'stay' ? 4 : 2)}`; if (seen.has(k)) return false; seen.add(k); return true; })
+    .map(s => { const { d, full, ...rest } = s as any; return rest as Suggestion; });
   const stays = all.filter(s => s.type === 'stay').slice(0, 5), areas = all.filter(s => s.type !== 'stay').slice(0, 5);
-  const stayFirst = stays.length > 0 && (remote[0]?.type === 'stay' || /\s/.test(q)) && !(local.length && scored[0]?.s === 0);
+  const stayFirst = stays.length > 0 && (saidStay || remote[0]?.type === 'stay') && !(local.length && scored[0]?.s === 0 && !saidStay);
   return stayFirst ? [...stays, ...areas] : [...areas, ...stays];
 }
