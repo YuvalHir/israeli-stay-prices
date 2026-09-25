@@ -11,6 +11,8 @@ export const SEARCHES_PER_CREDIT = 5;
 export const SEARCH_TTL_HOURS = 12;
 export const SEARCH_RADIUS_KM = 8;
 export const ANON_COOKIE = 'sp_anon';
+/** Distinct places one network (IP) may open for free per day. Higher than 3 because hostel Wi-Fi and mobile carriers share IPs. */
+export const ANON_IP_DAILY = 6;
 
 export async function creditState(DB: D1Database, userId: string, isAdmin = false) {
   const r = await DB.prepare(
@@ -30,14 +32,22 @@ const km = (aLat: number, aLon: number, bLat: number, bLon: number) => {
   return 12742 * Math.asin(Math.sqrt(h));
 };
 
-/** True when searchId is this user's, still fresh, and (if a point is given) the point is inside it. */
+/** True when searchId is this user's and still fresh (no location check). */
+export async function searchValid(DB: D1Database, userId: string, searchId: string | null | undefined, isAdmin = false) {
+  if (isAdmin) return true;
+  if (!searchId) return false;
+  return !!(await DB.prepare(`SELECT 1 FROM searches WHERE id = ? AND user_id = ? AND created_at >= datetime('now', ?)`).bind(searchId, userId, `-${SEARCH_TTL_HOURS} hours`).first());
+}
+
+/** True when searchId is this user's, still fresh, and the point is inside it. */
 export async function searchCovers(DB: D1Database, userId: string, searchId: string | null | undefined, lat?: number | null, lon?: number | null, isAdmin = false) {
   if (isAdmin) return true;
   if (!searchId) return false;
   const s = await DB.prepare(`SELECT lat, lon FROM searches WHERE id = ? AND user_id = ? AND created_at >= datetime('now', ?)`)
     .bind(searchId, userId, `-${SEARCH_TTL_HOURS} hours`).first<{ lat: number; lon: number }>();
   if (!s) return false;
-  if (lat == null || lon == null || !Number.isFinite(lat) || !Number.isFinite(lon)) return true;
+  // No known location = not covered. Prices only unlock for places we can place inside the search circle.
+  if (lat == null || lon == null || !Number.isFinite(lat) || !Number.isFinite(lon)) return false;
   return km(s.lat, s.lon, lat, lon) <= SEARCH_RADIUS_KM;
 }
 

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { env } from '@/lib/env';
 import { isCurrency } from '@/lib/currency';
-import { creditState, searchCovers } from '@/lib/gate';
+import { creditState, searchCovers, searchValid } from '@/lib/gate';
 
 // Report counts per place (public, no prices) so the list can show "3 reports".
 export async function GET(req: NextRequest) {
@@ -27,9 +27,17 @@ export async function GET(req: NextRequest) {
   // Prices only for signed-in users with an active search; everyone else sees counts.
   const user = await currentUser();
   const sid = req.nextUrl.searchParams.get('searchId');
-  const canSee = !!user && await searchCovers(DB, user.id, sid, null, null, !!user.is_admin);
+  const canSee = !!user && await searchValid(DB, user.id, sid, !!user.is_admin);
+  // A place's location is the average of its reports' coordinates. Places with no coordinates are never "inside".
   const inside = canSee ? new Map<string, boolean>() : null;
-  if (inside) for (const r of results) if (!inside.has(r.place_id)) inside.set(r.place_id, await searchCovers(DB, user!.id, sid, r.lat, r.lon, !!user!.is_admin));
+  if (inside) {
+    const pts = new Map<string, [number, number, number]>();
+    for (const r of results) if (r.lat != null && r.lon != null) { const p = pts.get(r.place_id) ?? [0, 0, 0]; pts.set(r.place_id, [p[0] + r.lat, p[1] + r.lon, p[2] + 1]); }
+    for (const id of new Set<string>(results.map((r: { place_id: string }) => r.place_id))) {
+      const p = pts.get(id);
+      inside.set(id, await searchCovers(DB, user!.id, sid, p ? p[0] / p[2] : null, p ? p[1] / p[2] : null, !!user!.is_admin));
+    }
+  }
   // Per place: report count and the prices (amount + currency) so the client can show a median in any display currency.
   const counts: Record<string, number> = {}, prices: Record<string, [number, string][]> = {};
   for (const r of results) { counts[r.place_id] = (counts[r.place_id] ?? 0) + 1; if (inside?.get(r.place_id)) (prices[r.place_id] ??= []).push([r.price, r.currency]); }
