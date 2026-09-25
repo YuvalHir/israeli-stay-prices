@@ -1,10 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import { Heebo } from 'next/font/google';
 import './globals.css';
 import Beacon from '@/components/Beacon';
 
-// Variable font (one file per script); only Hebrew is preloaded so it doesn't compete with the app on weak signal.
-const heebo = Heebo({ subsets: ['hebrew'], display: 'swap', adjustFontFallback: true });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://israeli-stay-prices.hyuval1511.workers.dev'),
@@ -24,8 +21,10 @@ export const viewport: Viewport = { themeColor: '#f6f3ee', width: 'device-width'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl" className={heebo.className}>
+    <html lang="he" dir="rtl">
       <head>
+        {/* Heebo, self-hosted: only Hebrew + basic Latin (2 files). Arrows and rare letters use the system font. */}
+        <link rel="preload" href="/fonts/heebo-hebrew.woff2" as="font" type="font/woff2" crossOrigin="" />
         <link rel="preconnect" href="https://tile.openstreetmap.org" />
         <link rel="preconnect" href="https://upload.wikimedia.org" />
         <link rel="preconnect" href="https://photon.komoot.io" crossOrigin="" />
