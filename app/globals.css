@@ -533,3 +533,5 @@ button.adm-pill { cursor: pointer; }
 .privacy-list li > span { flex: none; font-size: 18px; width: 30px; text-align: center; }
 .privacy-list p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--ink2); }
 .privacy-list b { display: block; color: var(--ink); font-size: 14.5px; }
+.returning { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line, rgba(0,0,0,.08)); }
+.returning-h { margin: 0 0 8px; font-weight: 700; font-size: 14px; }

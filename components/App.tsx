@@ -361,6 +361,9 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const [acct, setAcct] = useState(false);
   const [inviteFrom, setInviteFrom] = useState<string | null>(null);
   const [privacy, setPrivacy] = useState(false);
+  // Sign-up is invite-only. Strangers (no account on this device, no invite link opened) get the invite-only sheet;
+  // they can still sign in if they already have an account. The server enforces the rule either way.
+  const [canJoin, setCanJoin] = useState(false);
   const [sleepPick, setSleepPick] = useState<{ status: 'locating' | 'ready' | 'error'; places: Place[]; msg?: string } | null>(null);
 
   // Autocomplete: debounce, cancel the previous request, and drop any answer that isn't for the current text.
@@ -421,7 +424,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     setToastOut(false); setToast(m);
     toastTimers.current.push(setTimeout(() => hideToast(m), 4200));
   };
-  const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then((m: Me) => { setMe(m); try { localStorage.setItem('sp_me_hint', JSON.stringify(m.user ? { n: (m.user.name ?? m.user.email ?? '?').trim()[0] } : {})); } catch {} return m; }).catch(() => { const m = { user: null }; setMe(m); return m as Me; });
+  const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then((m: Me) => { setMe(m); try { localStorage.setItem('sp_me_hint', JSON.stringify(m.user ? { n: (m.user.name ?? m.user.email ?? '?').trim()[0] } : {})); if (m.user) { localStorage.setItem('sp_member', '1'); setCanJoin(true); } } catch {} return m; }).catch(() => { const m = { user: null }; setMe(m); return m as Me; });
   const loadListPrices = (list: Place[], sid: string | null) => {
     if (!list.length) return Promise.resolve();
     return fetch(`/api/reports?placeIds=${encodeURIComponent(list.map(p => p.id).join(','))}${sid ? `&searchId=${sid}` : ''}`)
@@ -495,7 +498,9 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     if (lp === 'failed') say('ההתחברות עם Google לא הצליחה. נסה שוב.');
     if (lp === 'invite_required') say('ההרשמה כרגע בהזמנה בלבד. בקש קישור אישי מחבר שכבר בפנים 🎟️');
     const inv = new URLSearchParams(location.search).get('invite'), from = new URLSearchParams(location.search).get('from');
-    if (inv === 'ok') { setInviteFrom(from ?? ''); try { localStorage.setItem('sp_onboarded', '1'); } catch {} }
+    try { const t = Number(localStorage.getItem('sp_invited') || 0); if (localStorage.getItem('sp_member') === '1' || (t && Date.now() - t < 29 * 864e5)) setCanJoin(true); } catch {}
+    if (inv === 'bad' || lp === 'invite_required') { try { localStorage.removeItem('sp_invited'); } catch {} setCanJoin(false); }
+    if (inv === 'ok') { setCanJoin(true); try { localStorage.setItem('sp_invited', String(Date.now())); } catch {} setInviteFrom(from ?? ''); try { localStorage.setItem('sp_onboarded', '1'); } catch {} }
     if (inv === 'bad') say('קישור ההזמנה כבר נוצל או בוטל. בקש קישור חדש ממי ששלח לך.');
     if (lp || inv) history.replaceState(null, '', '/');
     let seen = false; try { seen = localStorage.getItem('sp_onboarded') === '1'; } catch {}
@@ -673,7 +678,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       {me?.isAdmin && <a className="chip" href="/admin">אדמין</a>}
       {loggedIn ? <button className="avatar" onClick={() => setAcct(true)} title={me?.user?.email} aria-label="החשבון שלי והזמנות">{(me?.user?.name ?? me?.user?.email ?? '?').trim()[0]}</button>
         : !me ? (meHint?.n ? <span className="avatar pending" aria-hidden="true">{meHint.n}</span> : <span className="chip ghost-slot" aria-hidden="true" />)
-        : <button className="chip strong" onClick={() => { setLoginWhy('plain'); setLoginPop(true); }}>התחברות</button>}
+        : <button className="chip strong" onClick={() => { setLoginWhy('plain'); setLoginPop(true); }}>{canJoin ? 'התחברות' : '🎟️ בהזמנה בלבד'}</button>}
     </nav>
   </header>;
 
@@ -710,7 +715,19 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   return <>
     {toast && <div key={toast} className={`toast${toastOut ? ' out' : ''}`} role="status" onClick={() => hideToast()}>{toast}</div>}
 
-    {loginPop && <Sheet onClose={() => setLoginPop(false)}>{dismiss => <>
+    {loginPop && !canJoin && <Sheet onClose={() => setLoginPop(false)}>{dismiss => <>
+        <div className="sheet-step"><div className="sheet-icon">🎟️</div>
+          <h2>האתר בהזמנה בלבד</h2>
+          <p>{loginWhy === 'views' ? 'נגמרו 3 הצפיות החינמיות. ' : loginWhy === 'report' ? 'כדי לדווח צריך חשבון. ' : ''}כדי שהמחירים יישארו אמינים, מצטרפים רק דרך קישור אישי מחבר שכבר באתר. מכיר מישהו כזה? בקש ממנו קישור.</p></div>
+        <button className="btn primary block" onClick={dismiss}>הבנתי</button>
+        <div className="returning">
+          <p className="returning-h">כבר יש לך חשבון?</p>
+          <LoginNote onMore={() => setPrivacy(true)} />
+          <a className="btn block" href="/api/auth/google">התחבר עם Google</a>
+        </div>
+      </>}</Sheet>}
+
+    {loginPop && canJoin && <Sheet onClose={() => setLoginPop(false)}>{dismiss => <>
         <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>{loginWhy === 'plain' ? 'התחברות' : loginWhy === 'invite' ? 'הוזמנת! נשאר רק להתחבר' : loginWhy === 'report' ? 'רק להתחבר, וממשיכים' : 'נגמרו 3 הצפיות החינמיות'}</h2>
         <p>{loginWhy === 'report' ? 'הדיווח מוצג בלי שם ובלי מייל.' : 'התחבר כדי להמשיך.'} אחרי ההתחברות, כל דיווח על מחיר ששילמת, או 👍 על דיווח של מישהו אחר, פותח לך 5 חיפושים עם מחירים.</p></div>
         <LoginNote onMore={() => setPrivacy(true)} />
@@ -842,8 +859,8 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             {openState.loading ? <div className="detail-skel"><div className="skeleton sk-price" /><div className="skeleton sk-row" /><div className="skeleton sk-row" /></div>
             : openState.needLogin ? <div className="card cta">
                 <h3>🔒 נגמרו 3 הצפיות החינמיות</h3>
-                <p>התחבר עם Google, ואז כל דיווח מחיר (או 👍 על דיווח) פותח לך 5 חיפושים עם מחירים.</p>
-                <button className="btn primary block" onClick={() => { setLoginWhy('views'); setLoginPop(true); }}>התחבר עם Google</button>
+                <p>{canJoin ? 'התחבר עם Google, ואז כל דיווח מחיר (או 👍 על דיווח) פותח לך 5 חיפושים עם מחירים.' : 'האתר בהזמנה בלבד. עם קישור אישי מחבר מצטרפים, וכל דיווח מחיר (או 👍 על דיווח) פותח 5 חיפושים עם מחירים.'}</p>
+                <button className="btn primary block" onClick={() => { setLoginWhy('views'); setLoginPop(true); }}>{canJoin ? 'התחבר עם Google' : 'איך מצטרפים?'}</button>
               </div>
             : openState.locked ? <div className="card cta warn">
                 <h3>🔒 המחירים נעולים</h3>
