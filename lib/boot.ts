@@ -14,7 +14,8 @@ export const BOOT_HTML = `<section class="card"><h2>לאן?</h2><div class="pick
 
 const LOCAL = [...HOODS, ...HE_PLACES].map(p => [p.name, p.en, +p.lat.toFixed(4), +p.lon.toFixed(4), p.country ?? '']);
 
-const JS = `(function(){var B=document.getElementById('boot');if(!B)return;var W=window,I=B.querySelector('input'),L=B.querySelector('ul'),R=[],t,c=0,
+const JS = `document.addEventListener('DOMContentLoaded',function(){try{var O=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');O.unobserve(e.target)}})},{rootMargin:'0px 0px -8% 0px'});document.querySelectorAll('.reveal').forEach(function(el){O.observe(el)})}catch(e){}});
+(function(){var B=document.getElementById('boot');if(!B)return;var W=window,I=B.querySelector('input'),L=B.querySelector('ul'),R=[],t,c=0,
 LOC=__LOCAL__,ICON={hotel:'🏨',guest_house:'🏡',hostel:'🛏️',alpine_hut:'🏔️',motel:'🛣️'},OT={N:'node',W:'way',R:'relation'},
 STAY='hotel,hostel,guest_house,motel,apartment,chalet,camp_site,alpine_hut'.split(',').map(function(x){return'&osm_tag=tourism:'+x}).join('');
 W.__boot={};
