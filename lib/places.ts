@@ -112,7 +112,7 @@ export const QUICK_AREAS: Area[] = [
 ];
 
 // Popular destinations with Hebrew names, for Hebrew autocomplete (coordinates from OpenStreetMap Nominatim, 24 Sep 2026).
-export type Suggestion = Area & { sub?: string };
+export type Suggestion = Area & { sub?: string; type?: 'area' | 'stay'; placeId?: string; kind?: string; city?: string };
 const HE_PLACES: (Area & { en: string })[] = [
   { name: 'קטמנדו', en: "Kathmandu Metropolitan City", lat: 27.7083, lon: 85.3206, country: 'NP' },
   { name: 'פוקרה', en: "Pokhara", lat: 28.2095, lon: 83.9914, country: 'NP' },
@@ -164,25 +164,74 @@ const HE_PLACES: (Area & { en: string })[] = [
 const norm = (t: string) => t.replace(/[׳'"`]/g, '').trim().toLowerCase();
 
 /** Autocomplete: Hebrew list first, then worldwide places from Photon (OpenStreetMap). */
+/** Backpacker neighbourhoods Photon often misses or misspells (Thamle -> Thamel). */
+const HOODS: (Area & { en: string })[] = [
+  { name: 'תמל, קטמנדו', en: 'Thamel', lat: 27.7167, lon: 85.3127, country: 'NP' },
+  { name: 'לייקסייד, פוקרה', en: 'Lakeside Pokhara', lat: 28.2211, lon: 83.9583, country: 'NP' },
+  { name: 'חאו סן, בנגקוק', en: 'Khao San Road', lat: 13.7589, lon: 100.4973, country: 'TH' },
+  { name: 'האד רין, קופנגן', en: 'Haad Rin', lat: 9.675, lon: 100.0676, country: 'TH' },
+  { name: 'העיר העתיקה, האנוי', en: 'Hanoi Old Quarter', lat: 21.0353, lon: 105.85, country: 'VN' },
+  { name: 'פהרגנג׳, דלהי', en: 'Paharganj', lat: 28.6448, lon: 77.2167, country: 'IN' },
+  { name: 'ואשישט, מנאלי', en: 'Vashisht', lat: 32.2667, lon: 77.1886, country: 'IN' },
+];
+
+/** Edit distance with transpositions, capped for speed. */
+function dist(a: string, b: string) {
+  const m = a.length, n = b.length; if (Math.abs(m - n) > 2) return 3;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 1; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) {
+    const c = a[i - 1] === b[j - 1] ? 0 : 1;
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + c);
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[m][n];
+}
+/** 0 = prefix hit, 1-2 = typo, 9 = no match. Compares against each word and the whole name. */
+function fuzzy(q: string, name: string) {
+  const n = norm(name); if (!q) return 9;
+  if (n.startsWith(q) || n.split(/[ ,\-]+/).some(w => w.startsWith(q))) return 0;
+  if (q.length < 4) return 9;
+  const tol = q.length >= 6 ? 2 : 1;
+  let best = 9;
+  for (const w of [n, ...n.split(/[ ,\-]+/)]) { const dd = dist(q, w.slice(0, Math.max(q.length, Math.min(w.length, q.length + 1)))); if (dd < best) best = dd; }
+  return best <= tol ? best : 9;
+}
+
+const STAY_TAGS = ['hotel', 'hostel', 'guest_house', 'motel', 'apartment', 'chalet', 'camp_site', 'alpine_hut'];
+
+/**
+ * One search box for everything: towns, neighbourhoods and stays ("namaste namche", "yog hostel kathmandu").
+ * Local lists answer instantly and forgive typos; Photon (OSM, free, no key) fills in the rest.
+ */
 export async function suggestPlaces(text: string, bias?: { lat: number; lon: number } | null, signal?: AbortSignal): Promise<Suggestion[]> {
   const q = norm(text);
   if (q.length < 2) return [];
-  const local: Suggestion[] = HE_PLACES.filter(p => norm(p.name).startsWith(q) || norm(p.name).split(/[ ,]+/).some(w => w.startsWith(q)) || p.en.toLowerCase().startsWith(q))
-    .slice(0, 5).map(p => ({ name: p.name, lat: p.lat, lon: p.lon, country: p.country, sub: p.en }));
+  const scored = [...HOODS, ...HE_PLACES].map(p => ({ p, s: Math.min(fuzzy(q, p.name), fuzzy(q, p.en)) })).filter(x => x.s < 9).sort((a, b) => a.s - b.s);
+  const local: Suggestion[] = scored.slice(0, 4).map(({ p }) => ({ name: p.name, lat: p.lat, lon: p.lon, country: p.country, sub: p.en, type: 'area' }));
   let remote: Suggestion[] = [];
   if (!/[\u0590-\u05FF]/.test(text) || local.length === 0) {
     try {
-      const b = bias ? `&lat=${bias.lat}&lon=${bias.lon}&location_bias_scale=0.2` : '';
-      const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&limit=8&lang=en&osm_tag=place${b}`, { signal });
+      const b = bias ? `&lat=${bias.lat}&lon=${bias.lon}&location_bias_scale=0.3` : '';
+      const tags = ['place', ...STAY_TAGS.map(t => `tourism:${t}`)].map(t => `&osm_tag=${t}`).join('');
+      const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(text)}&limit=12&lang=en${tags}${b}`, { signal });
       if (r.ok) {
         const j = await r.json();
-        remote = (j.features ?? []).filter((f: any) => f.properties?.name).map((f: any) => {
-          const pr = f.properties;
-          return { name: pr.name, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], country: pr.countrycode?.toUpperCase(), sub: [pr.state, pr.country].filter(Boolean).join(', ') };
-        });
+        remote = (j.features ?? []).filter((f: any) => f.properties?.name).map((f: any): Suggestion => {
+          const pr = f.properties; const stay = pr.osm_key === 'tourism';
+          const town = pr.city || pr.town || pr.village || pr.district || pr.county;
+          const ot = ({ N: 'node', W: 'way', R: 'relation' } as Record<string, string>)[pr.osm_type];
+          return stay
+            ? { type: 'stay', name: pr.name, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], country: pr.countrycode?.toUpperCase(), kind: pr.osm_value, city: town, placeId: ot ? `osm-${ot}-${pr.osm_id}` : undefined, sub: [town, pr.country].filter(Boolean).join(', ') }
+            : { type: 'area', name: pr.name, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], country: pr.countrycode?.toUpperCase(), sub: [pr.osm_value === 'city' ? null : town, pr.state, pr.country].filter(Boolean).join(', ') };
+        }).filter((x: Suggestion) => x.type === 'area' || x.placeId);
       }
     } catch { /* offline or aborted */ }
   }
   const seen = new Set<string>();
-  return [...local, ...remote].filter(s => { const k = `${s.lat.toFixed(2)},${s.lon.toFixed(2)}`; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 8);
+  const all = [...local, ...remote].filter(s => { const k = `${s.type}:${s.lat.toFixed(s.type === 'stay' ? 4 : 2)},${s.lon.toFixed(s.type === 'stay' ? 4 : 2)}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  // Stays first when the query names one (several words, or Photon returned stays at the top); otherwise places first.
+  const stays = all.filter(s => s.type === 'stay').slice(0, 5), areas = all.filter(s => s.type !== 'stay').slice(0, 5);
+  const stayFirst = stays.length > 0 && (remote[0]?.type === 'stay' || /\s/.test(q)) && !(local.length && scored[0]?.s === 0);
+  return stayFirst ? [...stays, ...areas] : [...areas, ...stays];
 }

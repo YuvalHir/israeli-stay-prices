@@ -464,3 +464,11 @@ button.adm-pill { cursor: pointer; }
 .gate.wait { background: var(--sand); color: var(--ink2); }
 .avatar.pending { display: inline-grid; place-items: center; opacity: .55; cursor: default; }
 .chip.ghost-slot { display: inline-block; width: 78px; height: 34px; opacity: 0; }
+/* Unified search suggestions */
+.ac-list { animation: rise .22s var(--ease) both; max-height: min(420px, 60vh); }
+.ac-head { font-size: 11.5px; font-weight: 700; color: var(--ink2); letter-spacing: .02em; padding: 8px 10px 2px; }
+.ac-icon { width: 34px; height: 34px; border-radius: 10px; background: var(--sand); display: grid; place-items: center; font-size: 17px; flex: none; }
+.ac-icon.stay { background: var(--teal-soft); }
+.ac-text { flex: 1; min-width: 0; }
+.ac-text b, .ac-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-list .ac-flag { flex: none; font-size: 18px; }

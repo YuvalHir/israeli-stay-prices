@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { countryAt, localityAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, suggestPlaces, type Area, type Place, type Suggestion } from '@/lib/places';
 import { currencyFor, currencyName, flagOf, FLAG_BY_CURRENCY, formatMoney } from '@/lib/currency';
@@ -309,7 +309,18 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     const t = setTimeout(() => { suggestPlaces(q, area ?? myPos, ctl.signal).then(r => { if (!ctl.signal.aborted) setSugs(r); }); }, 250);
     return () => { clearTimeout(t); ctl.abort(); };
   }, [search]);
-  const pickSug = (sg: Suggestion) => { setSugOpen(false); setSearch(''); setSugs([]); loadArea({ name: sg.name, lat: sg.lat, lon: sg.lon, country: sg.country }); };
+  const pickSug = async (sg: Suggestion) => {
+    setSugOpen(false); setSearch(''); setSugs([]);
+    if (sg.type === 'stay' && sg.placeId) {
+      // A specific stay: load its surroundings for the list/map, then open the place itself.
+      const p: InitialPlace = { id: sg.placeId, name: sg.name, kind: sg.kind ?? 'guest_house', lat: sg.lat, lon: sg.lon, country: sg.country, locality: sg.city };
+      openPlace(p);
+      await loadArea({ name: sg.city ?? sg.name, lat: sg.lat, lon: sg.lon, country: sg.country }, true);
+      if (openRef.current?.id === p.id) openPlace(p, false); // refresh once this area's search is active
+      return;
+    }
+    loadArea({ name: sg.name, lat: sg.lat, lon: sg.lon, country: sg.country });
+  };
 
   const [toastOut, setToastOut] = useState(false);
   const toastTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -570,10 +581,15 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     <div className="searchrow">
       <div className="ac">
         <input value={search} onChange={e => { setSearch(e.target.value); setSugOpen(true); }} onFocus={() => setSugOpen(true)} onBlur={() => setTimeout(() => setSugOpen(false), 150)}
-          onKeyDown={e => { if (e.key === 'Enter') { if (sugs[0]) pickSug(sugs[0]); else doSearch(); } }} placeholder="חפש עיר, כפר או שכונה בעולם" aria-label="חיפוש אזור" autoComplete="off" role="combobox" aria-expanded={sugOpen && sugs.length > 0} />
-        {sugOpen && sugs.length > 0 && <ul className="ac-list" role="listbox">{sugs.map((sg, i) => <li key={i} role="option" aria-selected={false}>
-          <button onMouseDown={e => e.preventDefault()} onClick={() => pickSug(sg)}><span className="ac-flag">{flagOf(sg.country)}</span><span><b>{sg.name}</b>{sg.sub && <small>{sg.sub}</small>}</span></button>
-        </li>)}</ul>}
+          onKeyDown={e => { if (e.key === 'Enter') { if (sugs[0]) pickSug(sugs[0]); else doSearch(); } }} placeholder="עיר, שכונה או שם מלון" aria-label="חיפוש עיר, אזור או מקום לינה" enterKeyHint="search" autoComplete="off" role="combobox" aria-expanded={sugOpen && sugs.length > 0} />
+        {sugOpen && sugs.length > 0 && <ul className="ac-list" role="listbox">{sugs.map((sg, i) => <Fragment key={i}>
+          {(i === 0 || sugs[i - 1].type !== sg.type) && <li className="ac-head" aria-hidden="true">{sg.type === 'stay' ? 'מקומות לינה' : 'ערים ואזורים'}</li>}
+          <li role="option" aria-selected={false}>
+          <button onMouseDown={e => e.preventDefault()} onClick={() => pickSug(sg)}>
+            <span className={`ac-icon ${sg.type === 'stay' ? 'stay' : ''}`}>{sg.type === 'stay' ? (KIND_ICON[sg.kind ?? ''] ?? '🏨') : '📍'}</span>
+            <span className="ac-text"><b dir="auto">{sg.name}</b>{sg.sub && <small dir="auto">{sg.sub}</small>}</span>
+            <span className="ac-flag">{flagOf(sg.country)}</span></button>
+        </li></Fragment>)}</ul>}
       </div>
       <button className="btn primary" onClick={() => sugs[0] ? pickSug(sugs[0]) : doSearch()}>חפש</button>
     </div>
