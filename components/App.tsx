@@ -450,10 +450,11 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     if (!a.country) countryAt(a.lat, a.lon).then(c => { if (c) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, country: c } : cur); });
     setListPrices({}); setSearchId(null); setPricesLoading(true); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
     try {
-      const [osm, reported] = await Promise.all([
-        nearbyStays(a.lat, a.lon).catch(() => [] as Place[]),
-        fetch(`/api/reports?lat=${a.lat}&lon=${a.lon}`).then(r => r.json()).then(j => (j.places ?? []) as (Place & { n: number })[]).catch(() => []),
-      ]);
+      // One edge request for places + counts; the direct OSM lookup is only the fallback.
+      const j = await fetch(`/api/area?lat=${a.lat}&lon=${a.lon}`).then(r => r.ok ? r.json() : null).catch(() => null) as { places: Place[] | null; reported: (Place & { n: number })[]; counts: Record<string, number> } | null;
+      const km = (p: { lat: number; lon: number }) => Math.hypot((p.lat - a.lat) * 111, (p.lon - a.lon) * 111 * Math.cos(a.lat * Math.PI / 180));
+      const osm = j?.places?.length ? j.places.map(p => ({ ...p, distance: km(p) })) : await nearbyStays(a.lat, a.lon).catch(() => [] as Place[]);
+      const reported = j?.reported ?? await fetch(`/api/reports?lat=${a.lat}&lon=${a.lon}`).then(r => r.json()).then(j => (j.places ?? []) as (Place & { n: number })[]).catch(() => []);
       const found = [...osm];
       for (const r of reported) if (!found.some(p => p.id === r.id)) {
         const d = Math.hypot((r.lat - a.lat) * 111, (r.lon - a.lon) * 111 * Math.cos(a.lat * Math.PI / 180));
@@ -464,7 +465,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       const ids = found.filter(p => p.id.startsWith('osm-')).slice(0, 60).map(p => p.id).join(',');
       fetch(`/api/photos?lat=${a.lat.toFixed(3)}&lon=${a.lon.toFixed(3)}&ids=${ids}`).then(r => r.json())
         .then(j => { if (areaRef.current === a) setPhotos({ places: j.places ?? {}, area: j.area ?? [] }); }).catch(() => {});
-      setCounts(Object.fromEntries(reported.map(r => [r.id, r.n])));
+      setCounts({ ...Object.fromEntries(reported.map(r => [r.id, r.n])), ...(j?.counts ?? {}) });
       setPlaces(found); setStatus('ready');
       if (!found.length) { setPricesLoading(false); setMessage('לא נמצאו מקומות לינה במפה ברדיוס 2 ק״מ. אפשר לדווח ידנית.'); return; }
       const sid = await startSearch(a);
