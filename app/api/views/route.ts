@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   const nameKey = loc ? placeName.trim().toLowerCase() : '';
   const uid = user?.id ?? '';
   const { results } = await DB.prepare(
-    `SELECT r.id, r.place_name, r.country, r.price, r.currency, r.room, r.nights, r.stay_month, r.note, r.created_at,
+    `SELECT r.id, r.place_name, r.country, r.price, r.currency, r.room, r.beds, r.israeli_deal, r.nights, r.stay_month, r.note, r.created_at,
        (r.user_id = ?1) AS mine_report,
        (SELECT COUNT(*) FROM report_votes v WHERE v.report_id = r.id AND v.vote = 1) AS up,
        (SELECT COUNT(*) FROM report_votes v WHERE v.report_id = r.id AND v.vote = -1) AS down,

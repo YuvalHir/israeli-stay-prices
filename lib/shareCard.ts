@@ -1,7 +1,7 @@
 /** Draws the "I paid X here" share card on a canvas (client only). Canvas handles RTL + emoji natively. */
 import { currencyName, flagOf } from './currency';
 
-export type ShareInfo = { placeName: string; price: number; currency: string; country: string | null; room: 'dorm' | 'private'; nights: number; month: string; lat?: number; lon?: number };
+export type ShareInfo = { placeName: string; price: number; currency: string; country: string | null; room: 'dorm' | 'private'; beds?: number | ''; israeliDeal?: boolean; nights: number; month: string; lat?: number; lon?: number };
 
 export const SITE = 'https://israeli-stay-prices.hyuval1511.workers.dev';
 const SLOGAN = 'התמקחת? ספר לחבריך';
@@ -11,7 +11,7 @@ export function shareUrl(s: ShareInfo) {
 }
 export function shareText(s: ShareInfo) {
   const flag = s.country ? flagOf(s.country) + ' ' : '';
-  return `שילמתי ${s.price.toLocaleString('en-US')} ${currencyName(s.currency)} ללילה ב-${s.placeName} 👀 ${flag}\n${SLOGAN} 👇\n${shareUrl(s)}`;
+  return s.israeliDeal ? `ישנתי בחינם ב-${s.placeName} במסגרת הדיל הישראלי (ארוחת בוקר וערב בתשלום) 👀 ${flag}\n${SLOGAN} 👇\n${shareUrl(s)}` : `שילמתי ${s.price.toLocaleString('en-US')} ${currencyName(s.currency)} ללילה ב-${s.placeName} 👀 ${flag}\n${SLOGAN} 👇\n${shareUrl(s)}`;
 }
 
 
@@ -71,24 +71,24 @@ export async function drawShareCard(s: ShareInfo): Promise<Blob> {
 
   // "שילמתי 👀"
   ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.font = `700 66px ${font}`;
-  ctx.fillText('שילמתי', R, 640);
-  const tw = ctx.measureText('שילמתי').width;
+  ctx.fillText(s.israeliDeal ? 'הדיל הישראלי' : 'שילמתי', R, 640);
+  const tw = ctx.measureText(s.israeliDeal ? 'הדיל הישראלי' : 'שילמתי').width;
   if (eyes) ctx.drawImage(eyes, R - tw - 90, 582, 70, 70);
 
   // Price: big number + currency code
-  const num = s.price.toLocaleString('en-US');
+  const num = s.israeliDeal ? 'חינם' : s.price.toLocaleString('en-US');
   ctx.save(); ctx.direction = 'ltr'; ctx.textAlign = 'left';
-  ctx.font = `800 70px ${font}`; const cw = ctx.measureText(s.currency).width;
+  ctx.font = `800 70px ${font}`; const cw = s.israeliDeal ? 0 : ctx.measureText(s.currency).width;
   let size = 230; ctx.font = `800 ${size}px ${font}`;
   while (ctx.measureText(num).width + cw + 30 > maxW && size > 90) { size -= 10; ctx.font = `800 ${size}px ${font}`; }
   const nw = ctx.measureText(num).width;
   const x0 = R - nw - cw - 24;
   ctx.fillStyle = '#ffffff'; ctx.shadowColor = 'rgba(224,99,63,.85)'; ctx.shadowBlur = 50;
   ctx.fillText(num, x0 + cw + 24, 850);
-  ctx.shadowBlur = 0; ctx.fillStyle = '#ffb59c'; ctx.font = `800 70px ${font}`; ctx.fillText(s.currency, x0, 850);
+  ctx.shadowBlur = 0; ctx.fillStyle = '#ffb59c'; ctx.font = `800 70px ${font}`; if (!s.israeliDeal) ctx.fillText(s.currency, x0, 850);
   ctx.restore(); ctx.direction = 'rtl'; ctx.textAlign = 'right';
   ctx.fillStyle = '#ffb59c'; ctx.font = `700 48px ${font}`;
-  ctx.fillText(`ללילה · ${currencyName(s.currency)}`, R, 925);
+  ctx.fillText(s.israeliDeal ? 'לינה חינם · בוקר וערב בתשלום' : `ללילה · ${currencyName(s.currency)}`, R, 925);
 
   // Place name
   ctx.fillStyle = '#fff';

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { trekDealRegion, matchesRoomDeal } from '../lib/trekDeal';
+assert.equal(trekDealRegion(27.8042, 86.7098), 'Everest / Khumbu');
+assert.equal(trekDealRegion(28.6718, 84.1709), 'Annapurna');
+assert.equal(trekDealRegion(28.21, 85.5), 'Langtang');
+assert.equal(trekDealRegion(28.5, 84.8), 'Manaslu');
+assert.equal(trekDealRegion(27.7167, 85.3127), null, 'Kathmandu is not a trekking region');
+assert.equal(trekDealRegion(28.2211, 83.9583), null, 'Pokhara is not a trekking region');
+assert.equal(trekDealRegion(null, null), null);
+assert.equal(matchesRoomDeal({ beds: 3, israeli_deal: 1 }, 3, true), true);
+assert.equal(matchesRoomDeal({ beds: 3, israeli_deal: 0 }, 3, true), false);
+assert.equal(matchesRoomDeal({ beds: 2, israeli_deal: 1 }, 3, true), false);
+assert.equal(matchesRoomDeal({ beds: null, israeli_deal: 1 }, 3, true), false);
+console.log('trek deal tests passed');

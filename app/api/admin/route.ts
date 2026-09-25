@@ -26,7 +26,7 @@ export async function GET() {
       (SELECT COUNT(*) FROM report_votes v WHERE v.user_id = u.id) AS votes,
       (SELECT MAX(t) FROM (SELECT MAX(created_at) AS t FROM reports WHERE user_id = u.id UNION ALL SELECT MAX(created_at) FROM searches WHERE user_id = u.id UNION ALL SELECT MAX(created_at) FROM report_votes WHERE user_id = u.id)) AS last_seen
       FROM users u ORDER BY u.created_at DESC LIMIT 1000`),
-    DB.prepare(`SELECT r.id, r.user_id, r.place_id, r.place_name, r.area, r.country, r.price, r.currency, r.room, r.nights, r.stay_month, r.note, r.created_at, r.hidden, u.email, u.banned,
+    DB.prepare(`SELECT r.id, r.user_id, r.place_id, r.place_name, r.area, r.country, r.price, r.currency, r.room, r.beds, r.israeli_deal, r.nights, r.stay_month, r.note, r.created_at, r.hidden, u.email, u.banned,
       (SELECT COUNT(*) FROM report_votes v WHERE v.report_id = r.id AND v.vote = 1) AS up,
       (SELECT COUNT(*) FROM report_votes v WHERE v.report_id = r.id AND v.vote = -1) AS down
       FROM reports r JOIN users u ON u.id = r.user_id ORDER BY r.created_at DESC LIMIT 2000`),

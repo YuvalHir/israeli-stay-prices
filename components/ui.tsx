@@ -61,7 +61,7 @@ export function WhatsAppIcon() {
 
 export const SLOGAN = 'התמקחת? ספר לחבריך';
 export type Report = {
-  id: string; place_name: string; price: number; currency: string; country?: string | null; room: 'dorm' | 'private'; nights: number;
+  id: string; place_name: string; price: number; currency: string; country?: string | null; room: 'dorm' | 'private'; beds: number | null; israeli_deal: number; nights: number;
   stay_month: string; note: string | null; up?: number; down?: number; my_vote?: number | null; mine_report?: number;
 };
 export const A2HS_KEY = 'sp_a2hs';

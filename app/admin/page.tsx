@@ -5,7 +5,7 @@ import { placePath } from '@/lib/placeUrl';
 import { EVENTS, type EventName } from '@/lib/events';
 
 type U = { id: string; email: string; name: string | null; is_admin: number; banned: number; created_at: string; reports: number; reports24: number; views: number; votes: number; last_seen: string | null; invited_by?: string | null; invite_quota?: number; inv_used?: number; inv_open?: number };
-type R = { id: string; user_id: string; place_id: string; place_name: string; area: string | null; country: string | null; price: number; currency: string; room: string; nights: number; stay_month: string; note: string | null; created_at: string; hidden: number; email: string; banned: number; up: number; down: number };
+type R = { id: string; user_id: string; place_id: string; place_name: string; area: string | null; country: string | null; price: number; currency: string; room: string; beds: number | null; israeli_deal: number; nights: number; stay_month: string; note: string | null; created_at: string; hidden: number; email: string; banned: number; up: number; down: number };
 type V = { report_id: string; user_id: string; vote: number; created_at: string; email: string; place_name: string; price: number; currency: string; author_id: string };
 type Day = { day: string; reports: number; users: number; views: number; votes: number };
 type Data = { me: string; meId: string; stats: Record<string, number>; users: U[]; reports: R[]; byCountry: { country: string; n: number }[]; daily: Day[]; votes: V[]; topPlaces: { place_id: string; name: string; country: string | null; n: number }[]; events?: { day: string; name: string; n: number }[] };
@@ -29,18 +29,22 @@ function reportFlags(reports: R[], users: U[]): Map<string, Flag[]> {
   const wide = new Map<string, number[]>();
   const dup = new Map<string, number>();
   for (const r of reports) {
-    const k = `${r.place_id}|${r.currency}|${r.room}`; groups.set(k, [...(groups.get(k) ?? []), r.price]);
-    const w = `${r.country}|${r.currency}|${r.room}`; wide.set(w, [...(wide.get(w) ?? []), r.price]);
+    if (!r.israeli_deal) {
+      const k = `${r.place_id}|${r.currency}|${r.room}`; groups.set(k, [...(groups.get(k) ?? []), r.price]);
+      const w = `${r.country}|${r.currency}|${r.room}`; wide.set(w, [...(wide.get(w) ?? []), r.price]);
+    }
     const d = `${r.user_id}|${r.place_id}`; dup.set(d, (dup.get(d) ?? 0) + 1);
   }
   const burst = new Set(users.filter(u => u.reports24 >= 5).map(u => u.id));
   for (const r of reports) {
     const f: Flag[] = [];
-    const g = groups.get(`${r.place_id}|${r.currency}|${r.room}`)!;
-    const w = wide.get(`${r.country}|${r.currency}|${r.room}`)!;
-    const [base, n, hi, lo] = g.length >= 3 ? [median(g), g.length, 2.5, 0.4] : [median(w), w.length, 4, 0.25];
-    if (n >= 3 && r.price > base * hi) f.push({ k: 'hi', t: `יקר פי ${(r.price / base).toFixed(1)} מהחציון` });
-    if (n >= 3 && r.price < base * lo) f.push({ k: 'lo', t: `זול פי ${(base / r.price).toFixed(1)} מהחציון` });
+    if (!r.israeli_deal) {
+      const g = groups.get(`${r.place_id}|${r.currency}|${r.room}`)!;
+      const w = wide.get(`${r.country}|${r.currency}|${r.room}`)!;
+      const [base, n, hi, lo] = g.length >= 3 ? [median(g), g.length, 2.5, 0.4] : [median(w), w.length, 4, 0.25];
+      if (base > 0 && n >= 3 && r.price > base * hi) f.push({ k: 'hi', t: `יקר פי ${(r.price / base).toFixed(1)} מהחציון` });
+      if (r.price > 0 && n >= 3 && r.price < base * lo) f.push({ k: 'lo', t: `זול פי ${(base / r.price).toFixed(1)} מהחציון` });
+    }
     if ((dup.get(`${r.user_id}|${r.place_id}`) ?? 0) > 1) f.push({ k: 'dup', t: 'דיווח כפול מאותו משתמש' });
     if (burst.has(r.user_id)) f.push({ k: 'burst', t: '5+ דיווחים ב-24 שעות' });
     if (r.note && LINK.test(r.note)) f.push({ k: 'link', t: 'קישור בהערה' });
@@ -128,9 +132,9 @@ function InviteTree({ users }: { users: U[] }) {
 }
 
 function toCsv(rows: R[]) {
-  const head = ['created_at', 'place', 'country', 'area', 'price', 'currency', 'room', 'nights', 'month', 'up', 'down', 'hidden', 'email', 'note'];
+  const head = ['created_at', 'place', 'country', 'area', 'price', 'currency', 'room', 'beds', 'israeli_deal', 'nights', 'month', 'up', 'down', 'hidden', 'email', 'note'];
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  return [head.join(','), ...rows.map(r => [r.created_at, r.place_name, r.country, r.area, r.price, r.currency, r.room, r.nights, r.stay_month, r.up, r.down, r.hidden, r.email, r.note].map(esc).join(','))].join('\n');
+  return [head.join(','), ...rows.map(r => [r.created_at, r.place_name, r.country, r.area, r.price, r.currency, r.room, r.beds, r.israeli_deal, r.nights, r.stay_month, r.up, r.down, r.hidden, r.email, r.note].map(esc).join(','))].join('\n');
 }
 
 export default function Admin() {
@@ -230,8 +234,8 @@ export default function Admin() {
       {reports.length ? <ul className="adm-list">{reports.slice(0, 300).map(r => { const f = flags.get(r.id); return <li key={r.id} className={`adm-row ${r.hidden ? 'is-hidden' : ''} ${f ? 'is-flagged' : ''}`}>
         <input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} aria-label="בחר" />
         <div className="adm-main">
-          <div className="adm-line"><b dir="auto">{flagOf(r.country)} {r.place_name}</b><span className="adm-price" dir="ltr">{formatMoney(r.price, r.currency)}</span></div>
-          <div className="muted small">{r.room === 'dorm' ? 'דורם' : 'חדר פרטי'} · {r.nights} {r.nights === 1 ? 'לילה' : 'לילות'} · {r.stay_month}{r.area ? ` · ${r.area}` : ''} · 👍 {r.up} · 👎 {r.down}</div>
+          <div className="adm-line"><b dir="auto">{flagOf(r.country)} {r.place_name}</b><span className="adm-price" dir="ltr">{r.israeli_deal ? 'לינה חינם · ארוחות בתשלום' : formatMoney(r.price, r.currency)}</span></div>
+          <div className="muted small">{r.room === 'dorm' ? 'דורם' : 'חדר פרטי'}{r.beds ? ` · ${r.beds} מיטות` : ''}{r.israeli_deal ? ' · הדיל הישראלי' : ''} · {r.nights} {r.nights === 1 ? 'לילה' : 'לילות'} · {r.stay_month}{r.area ? ` · ${r.area}` : ''} · 👍 {r.up} · 👎 {r.down}</div>
           {r.note && <div className="adm-note" dir="auto">{r.note}</div>}
           <div className="muted small">{r.email} · {when(r.created_at)}{r.hidden ? ' · מוסתר' : ''}</div>
           {f && <div className="adm-flags">{f.map(x => <span key={x.k} className={`adm-flag ${x.k}`}>{x.t}</span>)}</div>}

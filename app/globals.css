@@ -540,3 +540,15 @@ button.adm-pill { cursor: pointer; }
 .boot-list .place { cursor: default; }
 .gate-slot { visibility: hidden; }
 .at-link .hero-photo { background-image: none; }
+
+/* Bed and trekking-deal controls */
+.deal-field { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.deal-label { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; min-height: 44px; }
+.deal-label input, .deal-filter input { accent-color: var(--teal); width: 20px; height: 20px; margin: 0; }
+.deal-help { border: 1px solid var(--line); border-radius: 50%; background: var(--card); font-weight: 700; width: 32px; height: 32px; cursor: pointer; }
+.deal-explain { flex: 0 0 100%; margin: 0; padding: 10px 12px; border-radius: 12px; color: var(--ink2); background: var(--sand); font-size: 14px; }
+.deal-caption { margin: 8px 0 0; }
+.room-filters { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin: 10px 0 6px; }
+.room-filters label { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.room-filters select { min-height: 40px; border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 6px 10px; }
+.room-filters .deal-filter { min-height: 40px; }

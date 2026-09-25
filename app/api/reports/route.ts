@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { env } from '@/lib/env';
 import { isCurrency } from '@/lib/currency';
+import { trekDealRegion } from '@/lib/trekDeal';
 import { creditState, searchCovers, searchValid } from '@/lib/gate';
 import { nominatimLookup } from '@/lib/placeLookup';
 import { badRequest, rateLimited, readJson, sameOrigin, tooMany, validCoord } from '@/lib/security';
@@ -24,8 +25,8 @@ export async function GET(req: NextRequest) {
   if (!ids.length) return NextResponse.json({ counts: {}, prices: {} });
   const { DB } = await env();
   const { results } = await DB.prepare(
-    `SELECT place_id, price, currency, lat, lon FROM reports WHERE hidden = 0 AND place_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 2000`,
-  ).bind(...ids).all<{ place_id: string; price: number; currency: string; lat: number | null; lon: number | null }>();
+    `SELECT place_id, price, currency, lat, lon, beds, israeli_deal FROM reports WHERE hidden = 0 AND place_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 2000`,
+  ).bind(...ids).all<{ place_id: string; price: number; currency: string; lat: number | null; lon: number | null; beds: number | null; israeli_deal: number }>();
   // Prices only for signed-in users with an active search; everyone else sees counts.
   const user = await currentUser();
   const sid = req.nextUrl.searchParams.get('searchId');
@@ -40,10 +41,16 @@ export async function GET(req: NextRequest) {
       inside.set(id, await searchCovers(DB, user!.id, sid, p ? p[0] / p[2] : null, p ? p[1] / p[2] : null, !!user!.is_admin));
     }
   }
-  // Per place: report count and the prices (amount + currency) so the client can show a median in any display currency.
-  const counts: Record<string, number> = {}, prices: Record<string, [number, string][]> = {};
-  for (const r of results) { counts[r.place_id] = (counts[r.place_id] ?? 0) + 1; if (inside?.get(r.place_id)) (prices[r.place_id] ??= []).push([r.price, r.currency]); }
-  return NextResponse.json({ counts, prices });
+  // Only non-price metadata is public; every price stays behind the existing search/location gate.
+  const counts: Record<string, number> = {}, features: Record<string, [number | null, number][]> = {}, prices: Record<string, [number, string, number | null, number][]> = {};
+  for (const r of results) {
+    counts[r.place_id] = (counts[r.place_id] ?? 0) + 1;
+    if (inside?.get(r.place_id)) {
+      (features[r.place_id] ??= []).push([r.beds, r.israeli_deal]);
+      (prices[r.place_id] ??= []).push([r.price, r.currency, r.beds, r.israeli_deal]);
+    }
+  }
+  return NextResponse.json({ counts, features, prices });
 }
 
 /** Limits that keep one account from farming searches or flooding a place. */
@@ -64,8 +71,11 @@ export async function POST(req: NextRequest) {
   const str = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0, max) : '';
   const price = typeof b.price === 'number' ? b.price : Number(b.price);
   const currency = str(b.currency, 3), room = str(b.room, 10);
+  const israeliDeal = b.israeliDeal === true;
+  const beds = b.beds == null || b.beds === '' ? null : b.beds;
+  if (beds !== null && (typeof beds !== 'number' || !Number.isInteger(beds) || beds < 1 || beds > 20)) return badRequest();
   let placeName = str(b.placeName, 120);
-  if (!placeName || !Number.isFinite(price) || !(price > 0) || price > 10_000_000 || !isCurrency(currency) || !['dorm', 'private'].includes(room)) return badRequest();
+  if (!placeName || !Number.isFinite(price) || (israeliDeal ? price !== 0 : !(price > 0)) || price > 10_000_000 || !isCurrency(currency) || !['dorm', 'private'].includes(room)) return badRequest();
   const nightsN = typeof b.nights === 'number' ? b.nights : Number(b.nights ?? 1);
   if (!Number.isFinite(nightsN)) return badRequest();
   const nights = Math.max(1, Math.min(60, Math.round(nightsN)));
@@ -90,6 +100,7 @@ export async function POST(req: NextRequest) {
   } else if (MANUAL_ID.test(rawId)) placeId = rawId;
   else placeId = `manual-${(country ?? 'xx').toLowerCase()}-${slug(area) || 'area'}-${slug(placeName) || 'place'}`;
 
+  if (israeliDeal && !trekDealRegion(lat, lon)) return badRequest();
   const { DB } = e;
   const lim = await DB.prepare(
     `SELECT (SELECT COUNT(*) FROM reports WHERE user_id = ?1 AND created_at >= datetime('now', '-1 day')) AS today,
@@ -98,9 +109,9 @@ export async function POST(req: NextRequest) {
   if (!user.is_admin && (lim?.same ?? 0) > 0) return NextResponse.json({ error: 'duplicate' }, { status: 409 });
   if (!user.is_admin && (lim?.today ?? 0) >= REPORTS_PER_DAY) return NextResponse.json({ error: 'daily_limit' }, { status: 429 });
   await DB.prepare(
-    `INSERT INTO reports (id, user_id, place_id, place_name, place_kind, lat, lon, area, country, price, currency, room, nights, stay_month, note)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(crypto.randomUUID(), user.id, placeId, placeName, kind, lat, lon, area, country, price, currency, room, nights, month, note).run();
+    `INSERT INTO reports (id, user_id, place_id, place_name, place_kind, lat, lon, area, country, price, currency, room, nights, stay_month, note, beds, israeli_deal)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(crypto.randomUUID(), user.id, placeId, placeName, kind, lat, lon, area, country, price, currency, room, nights, month, note, beds, israeliDeal ? 1 : 0).run();
   await countEvent(DB, 'report_sent');
   return NextResponse.json({ ok: true, ...(await creditState(DB, user.id, !!user.is_admin)) });
 }

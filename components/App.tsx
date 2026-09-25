@@ -8,6 +8,7 @@ import type { ShareInfo } from '@/lib/shareCard';
 import { ROOM_HE, KIND_ICON, curFlag, money, dist, median, monthLabel, lastMonths, Sheet, WhatsAppIcon, SLOGAN, type Report, readA2hs, writeA2hs, isStandalone, isIOS, canOfferA2hs, ShareGlyph } from '@/components/ui';
 import { placePath, SITE_URL } from '@/lib/placeUrl';
 import { BOOT_HTML, BOOT_JS } from '@/lib/boot';
+import { trekDealRegion, matchesRoomDeal } from '@/lib/trekDeal';
 
 export type { Photo };
 export type InitialPlace = Place & { locality?: string; region?: string; reports?: number; photo?: Photo | null };
@@ -78,7 +79,7 @@ function LoginNote({ onMore }: { onMore: () => void }) {
 
 const PRIVACY_ITEMS: [string, string, string][] = [
   ['👤', 'מגוגל', 'שם, מייל ומזהה החשבון בגוגל. לא תמונת פרופיל.'],
-  ['💬', 'דיווחים והצבעות', 'מקושרים לחשבון שלך כדי למנוע כפילויות, אבל מוצגים לכולם בלי שם.'],
+  ['💬', 'דיווחים והצבעות', 'מחיר, סוג חדר, מספר מיטות, סימון הדיל הישראלי (אם נבחר), לילות, חודש והערה. מקושרים לחשבון כדי למנוע כפילויות, ומוצגים בלי שם.'],
   ['📍', 'אזורים שחיפשת', 'המיקום והשעה של כל חיפוש עם מחירים, כדי לספור את 5 החיפושים.'],
   ['🎟️', 'הזמנות', 'מי הזמין אותך, והקישורים שיצרת ומי הצטרף דרכם.'],
   ['⚙️', 'פרטי חשבון', 'תאריך ההרשמה, והגדרות כמו חשבון מנהל או חסימה.'],
@@ -98,7 +99,10 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const setSearchId = (v: string | null) => { searchRef.current = v; setSearchIdState(v); };
   const [loginPop, setLoginPop] = useState(false);
   const areaRef = useRef<Area | null>(null);
-  const [listPrices, setListPrices] = useState<Record<string, [number, string][]>>({});
+  const [listPrices, setListPrices] = useState<Record<string, [number, string, number | null, number][]>>({});
+  const [listFeatures, setListFeatures] = useState<Record<string, [number | null, number][]>>({});
+  const [bedsFilter, setBedsFilter] = useState<number | null>(null);
+  const [dealFilter, setDealFilter] = useState(false);
   // True until auth and this area's prices have both resolved: show neutral placeholders, never a false 'locked'.
   const [pricesLoading, setPricesLoading] = useState(false);
   const [meHint, setMeHint] = useState<{ n?: string } | null>(null);
@@ -229,7 +233,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const loadListPrices = (list: Place[], sid: string | null) => {
     if (!list.length) return Promise.resolve();
     return fetch(`/api/reports?placeIds=${encodeURIComponent(list.map(p => p.id).join(','))}${sid ? `&searchId=${sid}` : ''}`)
-      .then(r => r.json()).then(j => { setCounts(j.counts ?? {}); setListPrices(j.prices ?? {}); }).catch(() => {});
+      .then(r => r.json()).then(j => { setCounts(j.counts ?? {}); setListPrices(j.prices ?? {}); setListFeatures(j.features ?? {}); }).catch(() => {});
   };
   /** Spend (or reuse) one search with prices for the area. Returns the search id or null. */
   const startSearch = async (a: Area, m?: Me): Promise<string | null> => {
@@ -247,7 +251,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     track('area_view');
     if (GENERIC.includes(a.name)) localityAt(a.lat, a.lon).then(l => { if (l) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, label: l.name, country: cur.country ?? l.country } : cur); });
     if (!a.country) countryAt(a.lat, a.lon).then(c => { if (c) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, country: c } : cur); });
-    setListPrices({}); setSearchId(null); setPricesLoading(true); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
+    setListPrices({}); setListFeatures({}); setBedsFilter(null); setDealFilter(false); setSearchId(null); setPricesLoading(true); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
     try {
       // One edge request for places + counts; the direct OSM lookup is only the fallback.
       // The pre-React script may already have asked for this exact area (shared link or early pick).
@@ -430,9 +434,10 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     }, () => setSleepPick({ status: 'error', places: [], msg: 'לא קיבלתי מיקום. אפשר לאשר מיקום בהגדרות הדפדפן, או לדווח ידנית.' }),
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
   };
-  const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); setSearchId(null); setListPrices({}); refreshMe(); };
+  const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); setSearchId(null); setListPrices({}); setListFeatures({}); refreshMe(); };
 
   const rs = openState.reports ?? [];
+  const filteredReports = rs.filter(r => matchesRoomDeal(r, bedsFilter, dealFilter));
   const viewCountry = open?.country ?? area?.country ?? ipCountry;
   const localCur = currencyFor(viewCountry);
   const dispCur = disp === 'local' ? localCur : disp;
@@ -444,14 +449,15 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   };
   const chooseDisp = (d: Disp) => { setDisp(d); try { localStorage.setItem('sp_disp', d); } catch {} };
   const summary = (() => {
-    if (!rs.length) return null;
-    const all = rs.map(r => conv(r.price, r.currency));
+    const paid = filteredReports.filter(r => !r.israeli_deal);
+    if (!paid.length) return null;
+    const all = paid.map(r => conv(r.price, r.currency));
     if (all.every(v => v != null)) {
       const prices = all as number[];
       return { cur: dispCur, med: median(prices), min: Math.min(...prices), max: Math.max(...prices), n: prices.length };
     }
     const byCur: Record<string, Report[]> = {};
-    for (const r of rs) (byCur[r.currency] ??= []).push(r);
+    for (const r of paid) (byCur[r.currency] ??= []).push(r);
     const top = Object.values(byCur).sort((x, y) => y.length - x.length)[0];
     const prices = top.map(r => r.price);
     return { cur: top[0].currency, med: median(prices), min: Math.min(...prices), max: Math.max(...prices), n: top.length };
@@ -462,16 +468,22 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     {localCur !== 'ILS' && <option value="ILS">🇮🇱 ₪ ILS</option>}
   </select>;
   const listMedian = (id: string): string | null => {
-    const ps = listPrices[id];
-    if (!ps?.length) return null;
-    const conv2 = ps.map(([p, c]) => conv(p, c));
+    const ps = (listPrices[id] ?? []).filter(([, , beds, deal]) => matchesRoomDeal({ beds, israeli_deal: deal }, bedsFilter, dealFilter));
+    if (!ps.length) return null;
+    if (ps.every(([, , , deal]) => deal === 1)) return 'לינה חינם*';
+    const paid = ps.filter(([, , , deal]) => deal !== 1);
+    const conv2 = paid.map(([p, c]) => conv(p, c));
     if (conv2.every(v => v != null)) { const m = median(conv2 as number[]); return money(m >= 100 ? Math.round(m) : Math.round(m * 100) / 100, dispCur); }
-    const c0 = ps[0][1]; return money(median(ps.filter(x => x[1] === c0).map(x => x[0])), c0);
+    const c0 = paid[0][1]; return money(median(paid.filter(x => x[1] === c0).map(x => x[0])), c0);
   };
+  const region = trekDealRegion(area?.lat, area?.lon);
+  const filterActive = bedsFilter !== null || dealFilter;
+  const filtersReady = !!Object.keys(listFeatures).length;
+  const matchesPlace = (id: string) => !filterActive || (listFeatures[id] ?? []).some(([beds, israeli_deal]) => matchesRoomDeal({ beds, israeli_deal }, bedsFilter, dealFilter));
   const reportCountry = (reporting && reporting !== 'manual' ? reporting.country : null) ?? open?.country ?? area?.country ?? ipCountry;
   const loggedIn = !!me?.user;
   const knownCount = places.filter(p => counts[p.id]).length;
-  const shown = onlyKnown ? places.filter(p => counts[p.id]) : places;
+  const shown = places.filter(p => (!onlyKnown || counts[p.id]) && matchesPlace(p.id));
   const showLanding = !area && !reporting && !open;
   // The landing photo was skipped for a shared area link (layout.tsx); allow it again once the list is up.
   useEffect(() => { if (area) document.documentElement.classList.remove('at-link'); }, [area]);
@@ -652,7 +664,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     : <>
       <Header />
       <main className="wrap app">
-        {reporting ? <ReportForm place={reporting === 'manual' ? null : reporting} area={area?.name ?? ''} country={reportCountry} onDone={afterReport} onCancel={() => setReporting(null)} />
+        {reporting ? <ReportForm place={reporting === 'manual' ? null : reporting} area={area?.name ?? ''} areaLat={area?.lat} areaLon={area?.lon} country={reportCountry} onDone={afterReport} onCancel={() => setReporting(null)} />
 
         : open ? <section className="detail">
             <div className="detail-top">
@@ -695,17 +707,19 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 <button className="btn primary block" onClick={() => loggedIn ? setReporting(open) : (setLoginWhy('report'), setLoginPop(true))}>שילמתי כאן, אדווח</button>
               </div>
             : <>
+                {filterActive && !filteredReports.length && <div className="card cta">אין כאן עדיין דיווח שמתאים למסננים. אפשר לשנות אותם ברשימת האזור.</div>}
                 {summary && <div className="card price-card">
                   <span className="muted small">חציון ללילה</span>
                   <div className="big-price"><PriceTag amount={summary.med} cur={summary.cur} roll /></div>
                   <div className="muted small">{summary.cur !== dispCur ? 'אין שער המרה כרגע · ' : ''}{summary.n === 1 ? 'דיווח אחד' : `${summary.n} דיווחים`}{summary.n > 1 ? ` · טווח ${money(summary.min, summary.cur)} – ${money(summary.max, summary.cur)}` : ''}</div>
                 </div>}
-                <ul className="reports">{rs.map(r => { const c = conv(r.price, r.currency); const same = r.currency === dispCur || c == null; return <li key={r.id} className="card report">
+                <ul className="reports">{filteredReports.map(r => { const c = conv(r.price, r.currency); const same = r.currency === dispCur || c == null; return <li key={r.id} className="card report">
                   <div className="report-top">
-                    <b className="report-price">{same ? <PriceTag amount={r.price} cur={r.currency} /> : <PriceTag amount={c!} cur={dispCur} approx />} <span className="muted small">ללילה</span></b>
+                    <b className="report-price">{r.israeli_deal ? 'לינה חינם*' : same ? <PriceTag amount={r.price} cur={r.currency} /> : <PriceTag amount={c!} cur={dispCur} approx />} <span className="muted small">ללילה</span></b>
                     <span className="muted small">{monthLabel(r.stay_month)}</span>
                   </div>
-                  <div className="muted small">{ROOM_HE[r.room]}{r.nights > 1 ? ` · ${r.nights} לילות` : ''}{!same ? ` · שולם ${money(r.price, r.currency)}` : ''}</div>
+                  <div className="muted small">{ROOM_HE[r.room]}{r.beds ? ` · ${r.beds} מיטות בחדר` : ''}{r.israeli_deal ? ' · הדיל הישראלי' : ''}{r.nights > 1 ? ` · ${r.nights} לילות` : ''}{!same && !r.israeli_deal ? ` · שולם ${money(r.price, r.currency)}` : ''}</div>
+                  {!!r.israeli_deal && <p className="muted small deal-caption">* הלינה בחינם בתנאי שאוכלים בוקר וערב בלודג׳. הארוחות בתשלום.</p>}
                   {r.note && <p className="report-note">{r.note}</p>}
                   <div className="votes">
                     {r.mine_report ? <span className="muted small">הדיווח שלך · 👍 {r.up ?? 0} · 👎 {r.down ?? 0}</span> : <>
@@ -742,11 +756,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 <button className={!onlyKnown ? 'on' : ''} onClick={() => setOnlyKnown(false)}>הכל ({places.length})</button>
                 <button className={onlyKnown ? 'on' : ''} onClick={() => setOnlyKnown(true)}>עם מחירים ({knownCount})</button>
               </div>
+              <div className="room-filters"><label>מיטות בחדר<select disabled={!filtersReady} value={bedsFilter ?? ''} onChange={e => setBedsFilter(e.target.value ? Number(e.target.value) : null)}><option value="">כל מספר</option>{Array.from({ length: 20 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}</select></label>{region && <label className="deal-filter"><input type="checkbox" disabled={!filtersReady} checked={dealFilter} onChange={e => setDealFilter(e.target.checked)} />הדיל הישראלי</label>}{!filtersReady && <span className="muted small">{pricesLoading ? 'טוען מסננים…' : 'אין דיווחים לסנן באזור הזה.'}</span>}</div>
               {onlyKnown && !knownCount && <p className="muted center">עוד אין מחירים באזור. תהיה הראשון לדווח!</p>}
-              <ul className="places">{shown.map((p, i) => { const n = counts[p.id] ?? 0; return <li key={p.id} style={{ ['--i' as any]: Math.min(i, 12) }}><button className="card place" onClick={() => openPlace(p)}>
+              {filterActive && !shown.length && <p className="muted center">אין דיווחים שמתאימים למסננים האלה.</p>}
+              <ul className="places">{shown.map((p, i) => { const n = filterActive ? (listFeatures[p.id] ?? []).filter(([beds, israeli_deal]) => matchesRoomDeal({ beds, israeli_deal }, bedsFilter, dealFilter)).length : counts[p.id] ?? 0; return <li key={p.id} style={{ ['--i' as any]: Math.min(i, 12) }}><button className="card place" onClick={() => openPlace(p)}>
                 <Thumb place={p} photo={photoFor(p)} />
                 <span className="place-body"><span className="name" dir="auto">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
-                {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span>
+                {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{listMedian(p.id) === 'לינה חינם*' ? 'ארוחות בתשלום' : n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span>
                   : n && (pricesLoading || !me) ? <span className="badge price-wait" aria-label="טוען מחיר"><i /></span>
                   : n ? <span className="badge locked price"><b>🔒 ₪••</b><small>{n === 1 ? 'דיווח 1' : `${n} דיווחים`}</small></span>
                   : <span className="badge empty">עוד אין מחיר</span>}

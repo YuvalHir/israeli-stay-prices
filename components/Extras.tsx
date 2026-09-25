@@ -7,42 +7,50 @@ import { ROOM_HE, KIND_ICON, curFlag, money, monthLabel, lastMonths, Sheet, What
 import { kindLabel, type Place } from '@/lib/places';
 import { currencyFor, currencyName } from '@/lib/currency';
 import { SITE_URL } from '@/lib/placeUrl';
+import { trekDealRegion } from '@/lib/trekDeal';
 
-export function ReportForm({ place, area, country, onDone, onCancel }: { place: Place | null; area: string; country: string | null; onDone: (msg: string, share?: ShareInfo) => void; onCancel: () => void }) {
+export function ReportForm({ place, area, areaLat, areaLon, country, onDone, onCancel }: { place: Place | null; area: string; areaLat?: number; areaLon?: number; country: string | null; onDone: (msg: string, share?: ShareInfo) => void; onCancel: () => void }) {
   const local = currencyFor(country);
   const options = Array.from(new Set([local, 'USD', 'ILS']));
   const [name, setName] = useState(place?.name ?? '');
   const [price, setPrice] = useState('');
   const [currency, setCurrency] = useState<string>(local);
   const [room, setRoom] = useState<Report['room']>('private');
+  const [beds, setBeds] = useState<number | ''>('');
+  const [israeliDeal, setIsraeliDeal] = useState(false);
+  const [dealHelp, setDealHelp] = useState(false);
+  const region = trekDealRegion(place?.lat ?? areaLat, place?.lon ?? areaLon);
   const [nights, setNights] = useState(1);
   const [month, setMonth] = useState(lastMonths()[0]);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async () => {
-    const p = Number(price.replace(/[^\d.]/g, ''));
+    const p = israeliDeal ? 0 : Number(price.replace(/[^\d.]/g, ''));
     if (!name.trim()) return setError('חסר שם המקום.');
-    if (!(p > 0)) return setError('חסר מחיר ללילה.');
+    if (!israeliDeal && !(p > 0)) return setError('חסר מחיר ללילה.');
+    if (!beds) return setError('חסר מספר המיטות בחדר.');
     setBusy(true); setError('');
     const res = await fetch('/api/reports', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ placeId: place?.id, placeName: name, placeKind: place?.kind, lat: place?.lat, lon: place?.lon, area, country, price: p, currency, room, nights, stayMonth: month, note }),
+      body: JSON.stringify({ placeId: place?.id, placeName: name, placeKind: place?.kind, lat: place?.lat ?? areaLat, lon: place?.lon ?? areaLon, area, country, price: p, currency, room, beds, israeliDeal, nights, stayMonth: month, note }),
     });
     if (!res.ok) { setBusy(false); return setError(res.status === 401 ? 'צריך להתחבר קודם.' : res.status === 409 ? 'כבר דיווחת על המקום הזה לחודש הזה. אפשר לדווח שוב על חודש אחר.' : res.status === 429 ? 'הגעת למגבלת הדיווחים להיום. נסה שוב מחר.' : 'השמירה לא הצליחה. נסה שוב.'); }
-    setBusy(false); try { navigator.vibrate?.([12, 40, 18]); } catch {} onDone('תודה! המחיר נשמר, וקיבלת 5 חיפושים עם מחירים.', { placeName: name.trim(), price: p, currency, country, room, nights, month, lat: place?.lat, lon: place?.lon });
+    setBusy(false); try { navigator.vibrate?.([12, 40, 18]); } catch {} onDone('תודה! הדיווח נשמר, וקיבלת 5 חיפושים עם מחירים.', { placeName: name.trim(), price: p, currency, country, room, beds, israeliDeal, nights, month, lat: place?.lat ?? areaLat, lon: place?.lon ?? areaLon });
   };
   return <section className="card form">
-    <div className="form-head"><button className="icon-btn" onClick={onCancel} aria-label="חזרה">→</button><div><h2>כמה שילמת ללילה?</h2><p className="muted small form-sub">{SLOGAN} 😉</p></div></div>
+    <div className="form-head"><button className="icon-btn" onClick={onCancel} aria-label="חזרה">→</button><div><h2>איך הייתה הלינה?</h2><p className="muted small form-sub">{SLOGAN} 😉</p></div></div>
     {place ? <p className="muted">{KIND_ICON[place.kind] ?? '🏠'} {place.name} · {kindLabel(place.kind)}</p> :
       <label className="field"><span>שם המקום</span><input value={name} onChange={e => setName(e.target.value)} placeholder="למשל Hotel Yog" /></label>}
-    <label className="field"><span>מחיר ללילה</span>
+    {!israeliDeal && <><label className="field"><span>מחיר ללילה</span>
       <div className="price-input"><input inputMode="decimal" dir="ltr" autoFocus={!!place} value={price} onChange={e => setPrice(e.target.value)} placeholder="0" /><b>{curFlag(currency, country)} {currency}</b></div>
     </label>
     <div className="field"><span>מטבע</span>
-      <div className="seg">{options.map(c => <button key={c} className={currency === c ? 'on' : ''} onClick={() => setCurrency(c)}>{curFlag(c, country)} {c === 'USD' ? 'דולר' : c === 'ILS' ? 'שקל' : currencyName(c)}</button>)}</div></div>
+      <div className="seg">{options.map(c => <button key={c} className={currency === c ? 'on' : ''} onClick={() => setCurrency(c)}>{curFlag(c, country)} {c === 'USD' ? 'דולר' : c === 'ILS' ? 'שקל' : currencyName(c)}</button>)}</div></div></>}
     <div className="field"><span>סוג לינה</span>
       <div className="seg">{(['private', 'dorm'] as const).map(r => <button key={r} className={room === r ? 'on' : ''} onClick={() => setRoom(r)}>{ROOM_HE[r]}</button>)}</div></div>
+    <label className="field"><span>כמה מיטות בחדר</span><select value={beds} onChange={e => setBeds(e.target.value ? Number(e.target.value) : '')}><option value="">בחר מספר מיטות</option>{Array.from({ length: 20 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}</select></label>
+    {region && <div className="deal-field"><label className="deal-label"><input type="checkbox" checked={israeliDeal} onChange={e => setIsraeliDeal(e.target.checked)} /><span>הדיל הישראלי</span></label><button type="button" className="deal-help" aria-label="מה זה הדיל הישראלי?" aria-expanded={dealHelp} onClick={() => setDealHelp(!dealHelp)}>?</button>{dealHelp && <p className="deal-explain">הלינה בחינם, בתנאי שאוכלים ארוחת בוקר וערב בלודג׳. הארוחות בתשלום; המחיר שלהן לא כלול בדיווח.</p>}</div>}
     <div className="two">
       <div className="field"><span>כמה לילות</span>
         <div className="stepper"><button onClick={() => setNights(Math.max(1, nights - 1))} aria-label="פחות">−</button><b key={nights} className="tick">{nights}</b><button onClick={() => setNights(Math.min(60, nights + 1))} aria-label="יותר">+</button></div></div>
@@ -51,7 +59,7 @@ export function ReportForm({ place, area, country, onDone, onCancel }: { place: 
     </div>
     <label className="field"><span>הערה (לא חובה)</span><input value={note} onChange={e => setNote(e.target.value)} placeholder="למשל: כולל ארוחת בוקר, התמקחתי מ-2000" /></label>
     {error && <div className="note warn">{error}</div>}
-    <div className="form-actions"><button className="btn primary block big" disabled={busy} onClick={submit}>{busy ? <span className="spinner" aria-hidden="true" /> : null}{busy ? 'שומר…' : 'שמור מחיר'}</button>
+    <div className="form-actions"><button className="btn primary block big" disabled={busy} onClick={submit}>{busy ? <span className="spinner" aria-hidden="true" /> : null}{busy ? 'שומר…' : 'שמור דיווח'}</button>
     <p className="muted small center anon-note">🔒 הדיווח מוצג בלי שם ובלי מייל.</p></div>
   </section>;
 }
