@@ -186,6 +186,42 @@ function InstallSheet({ ios, onInstall, onClose }: { ios: boolean; onInstall: ()
  * Bottom sheet with iOS-like manners: slides away on close instead of vanishing,
  * and can be dragged down to dismiss. `children` gets a `dismiss` that animates out first.
  */
+type InviteState = { invites: { code: string; created_at: string; used: boolean; revoked: boolean; used_name: string | null }[]; quota: number; left: number; unlimited: boolean };
+/** Account sheet: personal invite links (single use, 10 per person) and sign out. */
+function AccountSheet({ me, onClose, onLogout, say }: { me: { name?: string | null; email?: string }; onClose: () => void; onLogout: () => void; say: (m: string) => void }) {
+  const [st, setSt] = useState<InviteState | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { fetch('/api/invites').then(r => r.ok ? r.json() : null).then(setSt).catch(() => {}); }, []);
+  const link = (c: string) => `${SITE_URL}/i/${c}`;
+  const send = async (code: string) => {
+    const url = link(code); const text = 'הזמנה אישית לאתר של ישראלים שמשתפים כמה שילמו על לינה 🏡 הקישור עובד פעם אחת:';
+    track('share');
+    if (navigator.share) { try { await navigator.share({ text, url }); return; } catch (e: any) { if (e?.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(`${text} ${url}`); say('קישור ההזמנה הועתק 👍'); } catch { say(url); }
+  };
+  const create = async () => {
+    setBusy(true);
+    const r = await fetch('/api/invites', { method: 'POST' }).catch(() => null);
+    const j = r ? await r.json().catch(() => null) : null; setBusy(false);
+    if (!r?.ok || !j?.code) { say(j?.error === 'no_invites_left' ? 'נגמרו ההזמנות שלך' : 'לא הצלחתי ליצור קישור. נסה שוב.'); return; }
+    setSt(j); send(j.code);
+  };
+  const open = st?.invites.filter(i => !i.used && !i.revoked) ?? [];
+  const used = st?.invites.filter(i => i.used) ?? [];
+  return <Sheet onClose={onClose} className="acct-sheet">{dismiss => <>
+    <div className="sheet-step"><div className="sheet-icon">🎟️</div><h2>הזמן חברים</h2>
+      <p>האתר כרגע בהזמנה בלבד. כל קישור אישי עובד פעם אחת, וכל מי שמצטרף מקבל 10 הזמנות משלו.</p></div>
+    {!st ? <div className="skeleton row-skel" /> : <>
+      <div className="inv-count"><b>{st.unlimited ? '∞' : st.left}</b><span>{st.unlimited ? 'הזמנות ללא הגבלה (אדמין)' : `הזמנות נשארו מתוך ${st.quota}`}</span></div>
+      <button className="btn primary block" disabled={busy || st.left <= 0} onClick={create}>{busy ? 'יוצר קישור…' : st.left > 0 ? 'צור קישור הזמנה ושלח' : 'נגמרו ההזמנות'}</button>
+      {open.length > 0 && <><h3 className="inv-h">קישורים שעוד לא נוצלו</h3><ul className="inv-list">{open.slice(0, 10).map(i => <li key={i.code}><code dir="ltr">/i/{i.code}</code><button className="chip" onClick={() => send(i.code)}>שלח שוב</button></li>)}</ul></>}
+      {used.length > 0 && <><h3 className="inv-h">הצטרפו דרכך</h3><ul className="inv-list">{used.map(i => <li key={i.code}><span>✅ {i.used_name ?? 'מישהו'}</span></li>)}</ul></>}
+    </>}
+    <p className="muted small center">מחובר כ-{me.email}</p>
+    <button className="btn ghost block" onClick={() => { dismiss(); onLogout(); }}>התנתק</button>
+  </>}</Sheet>;
+}
+
 function Sheet({ onClose, className = '', children }: { onClose?: () => void; className?: string; children: (dismiss: () => void) => React.ReactNode }) {
   const [closing, setClosing] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -302,9 +338,10 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     installEvtRef.current = null; setInstallEvt(null);
     if (r?.outcome === 'accepted') { track('install'); writeA2hs({ ...readA2hs(), installed: true }); setInstalled(true); } else closeA2hs();
   };
-  const [loginWhy, setLoginWhy] = useState<'views' | 'report'>('views');
+  const [loginWhy, setLoginWhy] = useState<'views' | 'report' | 'invite'>('views');
   useEffect(() => { if (reporting) track('report_open'); }, [!!reporting]);
   useEffect(() => { if (loginPop) track('login_open'); }, [loginPop]);
+  const [acct, setAcct] = useState(false);
   const [sleepPick, setSleepPick] = useState<{ status: 'locating' | 'ready' | 'error'; places: Place[]; msg?: string } | null>(null);
 
   // Autocomplete: debounce, cancel the previous request, and drop any answer that isn't for the current text.
@@ -437,7 +474,11 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     const at = new URLSearchParams(location.search).get('at')?.split(',').map(Number);
     const lp = new URLSearchParams(location.search).get('login');
     if (lp === 'failed') say('ההתחברות עם Google לא הצליחה. נסה שוב.');
-    if (lp) history.replaceState(null, '', '/');
+    if (lp === 'invite_required') say('ההרשמה כרגע בהזמנה בלבד. בקש קישור אישי מחבר שכבר בפנים 🎟️');
+    const inv = new URLSearchParams(location.search).get('invite'), from = new URLSearchParams(location.search).get('from');
+    if (inv === 'ok') { say(`🎟️ ${from ? `${from} הזמין אותך!` : 'קיבלת הזמנה!'} התחבר עם Google כדי להצטרף`); setLoginWhy('invite'); setLoginPop(true); }
+    if (inv === 'bad') say('קישור ההזמנה כבר נוצל או בוטל. בקש קישור חדש ממי ששלח לך.');
+    if (lp || inv) history.replaceState(null, '', '/');
     let seen = false; try { seen = localStorage.getItem('sp_onboarded') === '1'; } catch {}
     if (initialPlace) {
       history.replaceState({ place: initialPlace }, '', location.pathname);
@@ -610,7 +651,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       {!installed && (installEvt || ios) && <button className="chip" onClick={() => offerInstall(true)}>📲 התקן</button>}
       {DispSwitch}
       {me?.isAdmin && <a className="chip" href="/admin">אדמין</a>}
-      {loggedIn ? <button className="avatar" onClick={logout} title={`התנתק (${me?.user?.email})`}>{(me?.user?.name ?? me?.user?.email ?? '?').trim()[0]}</button>
+      {loggedIn ? <button className="avatar" onClick={() => setAcct(true)} title={me?.user?.email} aria-label="החשבון שלי והזמנות">{(me?.user?.name ?? me?.user?.email ?? '?').trim()[0]}</button>
         : !me ? (meHint?.n ? <span className="avatar pending" aria-hidden="true">{meHint.n}</span> : <span className="chip ghost-slot" aria-hidden="true" />)
         : <a className="chip strong" href="/api/auth/google">התחברות</a>}
     </nav>
@@ -650,12 +691,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     {toast && <div key={toast} className={`toast${toastOut ? ' out' : ''}`} role="status" onClick={() => hideToast()}>{toast}</div>}
 
     {loginPop && <Sheet onClose={() => setLoginPop(false)}>{dismiss => <>
-        <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>{loginWhy === 'report' ? 'רק להתחבר, וממשיכים' : 'נגמרו 3 הצפיות החינמיות'}</h2>
+        <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>{loginWhy === 'invite' ? 'הוזמנת! נשאר רק להתחבר' : loginWhy === 'report' ? 'רק להתחבר, וממשיכים' : 'נגמרו 3 הצפיות החינמיות'}</h2>
         <p>{loginWhy === 'report' ? 'הדיווח אנונימי: לא מוצגים שם או מייל. ההתחברות רק מונעת דיווחים כפולים.' : 'התחבר כדי להמשיך.'} אחרי ההתחברות, כל דיווח על מחיר ששילמת, או 👍 על דיווח של מישהו אחר, פותח לך 5 חיפושים עם מחירים.</p></div>
         <a className="btn primary block" href="/api/auth/google">התחבר עם Google</a>
         <button className="btn ghost block" onClick={dismiss}>אחר כך</button>
       </>}</Sheet>}
 
+    {acct && me?.user && <AccountSheet me={me.user} onClose={() => setAcct(false)} onLogout={logout} say={say} />}
     {shareInfo && <ShareSheet info={shareInfo} onClose={() => { setShareInfo(null); setTimeout(() => offerInstall(), 600); }} />}
     {a2hs && !shareInfo && !onboarding && !loginPop && !sleepPick && <InstallSheet ios={a2hs === 'ios'} onInstall={doInstall} onClose={closeA2hs} />}
 

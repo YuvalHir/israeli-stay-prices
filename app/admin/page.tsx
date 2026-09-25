@@ -4,7 +4,7 @@ import { flagOf, formatMoney } from '@/lib/currency';
 import { placePath } from '@/lib/placeUrl';
 import { EVENTS, type EventName } from '@/lib/events';
 
-type U = { id: string; email: string; name: string | null; is_admin: number; banned: number; created_at: string; reports: number; reports24: number; views: number; votes: number; last_seen: string | null };
+type U = { id: string; email: string; name: string | null; is_admin: number; banned: number; created_at: string; reports: number; reports24: number; views: number; votes: number; last_seen: string | null; invited_by?: string | null; invite_quota?: number; inv_used?: number; inv_open?: number };
 type R = { id: string; user_id: string; place_id: string; place_name: string; area: string | null; country: string | null; price: number; currency: string; room: string; nights: number; stay_month: string; note: string | null; created_at: string; hidden: number; email: string; banned: number; up: number; down: number };
 type V = { report_id: string; user_id: string; vote: number; created_at: string; email: string; place_name: string; price: number; currency: string; author_id: string };
 type Day = { day: string; reports: number; users: number; views: number; votes: number };
@@ -109,6 +109,24 @@ function Events({ rows, days }: { rows: { day: string; name: string; n: number }
   </section>;
 }
 
+/** Who invited whom, from the root (people with no inviter) down. */
+function InviteTree({ users }: { users: U[] }) {
+  const kids = new Map<string, U[]>();
+  for (const u of users) if (u.invited_by) { if (!kids.has(u.invited_by)) kids.set(u.invited_by, []); kids.get(u.invited_by)!.push(u); }
+  const size = (id: string): number => (kids.get(id) ?? []).reduce((n, k) => n + 1 + size(k.id), 0);
+  const Node = ({ u, depth }: { u: U; depth: number }): React.ReactElement => <li>
+    <div className={`tree-node ${u.banned ? 'is-hidden' : ''}`}>
+      <span className="adm-avatar sm">{(u.name ?? u.email).slice(0, 1).toUpperCase()}</span>
+      <span className="tree-name"><b>{u.name ?? u.email}</b><small className="muted">{u.reports} דיווחים{kids.get(u.id)?.length ? ` · הזמין ${kids.get(u.id)!.length}` : ''}{size(u.id) > (kids.get(u.id)?.length ?? 0) ? ` · ${size(u.id)} בענף` : ''}</small></span>
+      {u.banned ? <span className="adm-flag ban">חסום</span> : null}
+    </div>
+    {kids.get(u.id)?.length ? <ul>{kids.get(u.id)!.map(k => <Node key={k.id} u={k} depth={depth + 1} />)}</ul> : null}
+  </li>;
+  const roots = users.filter(u => !u.invited_by || !users.some(x => x.id === u.invited_by));
+  return <section className="adm-card"><h2>עץ הזמנות</h2><p className="muted small">מי הזמין את מי. חסימה של משתמש לא חוסמת את מי שהוא הזמין.</p>
+    <ul className="tree">{roots.map(u => <Node key={u.id} u={u} depth={0} />)}</ul></section>;
+}
+
 function toCsv(rows: R[]) {
   const head = ['created_at', 'place', 'country', 'area', 'price', 'currency', 'room', 'nights', 'month', 'up', 'down', 'hidden', 'email', 'note'];
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -118,7 +136,7 @@ function toCsv(rows: R[]) {
 export default function Admin() {
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState('');
-  const [tab, setTab] = useState<'reports' | 'users' | 'votes'>('reports');
+  const [tab, setTab] = useState<'reports' | 'users' | 'votes' | 'tree'>('reports');
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'flagged' | 'hidden'>('all');
   const [country, setCountry] = useState('');
@@ -136,6 +154,7 @@ export default function Admin() {
     say(r.ok ? (done ?? 'בוצע') : 'הפעולה לא הצליחה'); setSel(new Set()); load();
   };
 
+  const byId = useMemo(() => new Map((data?.users ?? []).map(u => [u.id, u])), [data]);
   const flags = useMemo(() => data ? reportFlags(data.reports, data.users) : new Map<string, Flag[]>(), [data]);
   const ql = q.trim().toLowerCase();
   const reports = useMemo(() => (data?.reports ?? []).filter(r =>
@@ -191,6 +210,7 @@ export default function Admin() {
         <button className={tab === 'reports' ? 'on' : ''} onClick={() => { setTab('reports'); setSel(new Set()); }}>דיווחים</button>
         <button className={tab === 'users' ? 'on' : ''} onClick={() => setTab('users')}>משתמשים</button>
         <button className={tab === 'votes' ? 'on' : ''} onClick={() => setTab('votes')}>הצבעות</button>
+        <button className={tab === 'tree' ? 'on' : ''} onClick={() => setTab('tree')}>עץ הזמנות</button>
       </div>
       <input className="adm-search" type="search" placeholder={tab === 'users' ? 'חיפוש לפי מייל או שם' : 'חיפוש מקום, אזור, מייל, הערה'} value={q} onChange={e => setQ(e.target.value)} />
       {tab !== 'votes' && <div className="adm-chips">
@@ -228,17 +248,21 @@ export default function Admin() {
       <div className="adm-main">
         <div className="adm-line"><b>{u.name ?? u.email}</b>{u.is_admin ? <span className="adm-flag admin">אדמין</span> : null}</div>
         <div className="muted small">{u.email}</div>
+        <div className="muted small">🎟️ {u.is_admin ? 'הזמנות ללא הגבלה' : `${(u.inv_used ?? 0)} הצטרפו · ${u.inv_open ?? 0} קישורים פתוחים · מכסה ${u.invite_quota ?? 10}`}{u.invited_by ? ` · הוזמן ע״י ${byId.get(u.invited_by)?.name ?? byId.get(u.invited_by)?.email ?? '?'}` : ''}</div>
         <div className="muted small">{u.reports} דיווחים · {u.votes} הצבעות · {u.views} חיפושים · נראה {ago(u.last_seen)} · הצטרף {when(u.created_at)}</div>
         {f.length > 0 && <div className="adm-flags">{f.map(x => <span key={x.k} className={`adm-flag ${x.k}`}>{x.t}</span>)}</div>}
       </div>
       <div className="adm-actions">
         <button className="btn small" onClick={() => { setTab('reports'); setQ(u.email); setFilter('all'); }}>דיווחים</button>
+        {!u.is_admin && <button className="btn small" onClick={() => act({ action: 'setQuota', id: u.id, quota: (u.invite_quota ?? 10) + 10 } as any, `לתת עוד 10 הזמנות? (מכסה חדשה: ${(u.invite_quota ?? 10) + 10})`, 'נוספו 10 הזמנות')}>+10 הזמנות</button>}
+        {!u.is_admin && ((u.inv_open ?? 0) > 0 || (u.invite_quota ?? 10) > 0) && <button className="btn small" onClick={() => act({ action: 'revokeInvites', id: u.id, value: true }, 'לעצור הזמנות? הקישורים שלא נוצלו יבוטלו. מי שכבר הצטרף נשאר.', 'ההזמנות נעצרו')}>עצור הזמנות</button>}
         <button className="btn small" onClick={() => act({ action: 'resetViews', id: u.id }, 'להחזיר למשתמש את כל החיפושים שניצל?', 'החיפושים אופסו')}>אפס חיפושים</button>
         {u.id !== data.meId && <button className="btn small" onClick={() => act({ action: 'setAdmin', id: u.id, value: !u.is_admin }, u.is_admin ? 'להסיר הרשאת אדמין?' : 'לתת הרשאת אדמין?')}>{u.is_admin ? 'הסר אדמין' : 'הפוך לאדמין'}</button>}
         {u.id !== data.meId && <button className={`btn small ${u.banned ? '' : 'danger'}`} onClick={() => act({ action: 'ban', id: u.id, value: !u.banned }, u.banned ? 'לבטל את החסימה ולהציג שוב את הדיווחים שלו?' : 'לחסום? הדיווחים שלו יוסתרו, והוא לא יוכל לדווח או להצביע.', u.banned ? 'החסימה בוטלה' : 'נחסם')}>{u.banned ? 'בטל חסימה' : 'חסום'}</button>}
       </div>
     </li>)}</ul> : <div className="adm-empty">אין משתמשים שמתאימים לסינון.</div>)}
 
+    {tab === 'tree' && <InviteTree users={data.users} />}
     {tab === 'votes' && (votes.length ? <ul className="adm-list">{votes.slice(0, 300).map(v => <li key={v.report_id + v.user_id} className="adm-row">
       <div className={`adm-vote ${v.vote === 1 ? 'up' : 'down'}`}>{v.vote === 1 ? '👍' : '👎'}</div>
       <div className="adm-main">

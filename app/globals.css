@@ -497,3 +497,16 @@ button.adm-pill { cursor: pointer; }
 .ev-d { font-size: 12px; color: var(--ink2); text-align: center; }
 .ev-d.up { color: #1f8a5b; } .ev-d.down { color: #c2553a; }
 .adm-events .spark { width: 84px; height: 26px; }
+.inv-count { display: flex; align-items: baseline; gap: 10px; justify-content: center; margin: 4px 0 12px; }
+.inv-count b { font-size: 34px; font-weight: 800; color: var(--teal); }
+.inv-h { font-size: 13px; color: var(--ink2); margin: 16px 0 6px; }
+.inv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.inv-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--sand); border-radius: 12px; font-size: 14px; }
+.inv-list code { font-size: 12px; color: var(--ink2); }
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree ul { padding-inline-start: 18px; border-inline-start: 2px solid var(--line); margin-inline-start: 14px; }
+.tree-node { display: flex; align-items: center; gap: 10px; padding: 7px 4px; }
+.tree-name { display: flex; flex-direction: column; min-width: 0; }
+.tree-name small { font-size: 12px; }
+.adm-avatar.sm { width: 28px; height: 28px; font-size: 13px; flex: none; }
+.tree-node.is-hidden { opacity: .5; }

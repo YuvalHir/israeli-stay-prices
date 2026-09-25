@@ -2,6 +2,7 @@ import { countEvent } from '@/lib/events';
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { createSession, SESSION_COOKIE } from '@/lib/auth';
+import { INVITE_COOKIE, validInvite } from '@/lib/invites';
 
 export async function GET(req: NextRequest) {
   const e = await env();
@@ -33,14 +34,31 @@ export async function GET(req: NextRequest) {
   }
 
   const isNew = !(await e.DB.prepare('SELECT 1 FROM users WHERE id = ?').bind(payload.sub).first());
+  const admins = (e.ADMIN_EMAILS ?? '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+  const isAdminEmail = admins.includes(payload.email.toLowerCase());
+  // Sign-up is invite-only: a new account needs a valid personal invite link (admins excepted).
+  const invite = isNew && !isAdminEmail ? await validInvite(e.DB, req.cookies.get(INVITE_COOKIE)?.value) : null;
+  if (isNew && !isAdminEmail && !invite) {
+    const r = NextResponse.redirect(`${e.APP_URL}/?login=invite_required`);
+    r.cookies.delete('sp_oauth_state'); r.cookies.delete('sp_oauth_verifier');
+    return r;
+  }
   await e.DB.prepare(
     `INSERT INTO users (id, email, name) VALUES (?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET email = excluded.email, name = excluded.name`,
   ).bind(payload.sub, payload.email, payload.name ?? null).run();
+  if (invite) {
+    // Claim the code atomically; if someone else used it a moment ago, undo the sign-up.
+    const claim = await e.DB.prepare(`UPDATE invites SET used_by = ?, used_at = datetime('now') WHERE code = ? AND used_by IS NULL AND revoked = 0`).bind(payload.sub, invite.code).run();
+    if (!claim.meta?.changes) {
+      await e.DB.prepare('DELETE FROM users WHERE id = ?').bind(payload.sub).run();
+      return NextResponse.redirect(`${e.APP_URL}/?invite=bad`);
+    }
+    await e.DB.prepare('UPDATE users SET invited_by = ? WHERE id = ?').bind(invite.inviter_id, payload.sub).run();
+  }
   if (isNew) await countEvent(e.DB, 'signup');
 
-  const admins = (e.ADMIN_EMAILS ?? '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
-  if (admins.includes(payload.email.toLowerCase())) {
+  if (isAdminEmail) {
     await e.DB.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').bind(payload.sub).run();
   }
 
@@ -49,5 +67,6 @@ export async function GET(req: NextRequest) {
   res.cookies.set(SESSION_COOKIE, token, { httpOnly: true, secure: true, sameSite: 'lax', path: '/', expires });
   res.cookies.delete('sp_oauth_state');
   res.cookies.delete('sp_oauth_verifier');
+  res.cookies.delete(INVITE_COOKIE);
   return res;
 }

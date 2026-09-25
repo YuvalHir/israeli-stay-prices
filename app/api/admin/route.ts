@@ -16,7 +16,9 @@ export async function GET() {
       (SELECT COUNT(*) FROM reports WHERE created_at >= datetime('now','-7 days')) AS reports7,
       (SELECT COUNT(*) FROM searches WHERE created_at >= datetime('now','-7 days')) AS views7,
       (SELECT COUNT(*) FROM report_votes WHERE created_at >= datetime('now','-7 days')) AS votes7`),
-    DB.prepare(`SELECT u.id, u.email, u.name, u.is_admin, u.banned, u.created_at,
+    DB.prepare(`SELECT u.id, u.email, u.name, u.is_admin, u.banned, u.created_at, u.invited_by, u.invite_quota,
+      (SELECT COUNT(*) FROM invites i WHERE i.inviter_id = u.id AND i.used_by IS NOT NULL) AS inv_used,
+      (SELECT COUNT(*) FROM invites i WHERE i.inviter_id = u.id AND i.used_by IS NULL AND i.revoked = 0) AS inv_open,
       (SELECT COUNT(*) FROM reports r WHERE r.user_id = u.id) AS reports,
       (SELECT COUNT(*) FROM reports r WHERE r.user_id = u.id AND r.created_at >= datetime('now','-1 day')) AS reports24,
       (SELECT COUNT(*) FROM searches v WHERE v.user_id = u.id) AS views,
@@ -44,7 +46,7 @@ export async function GET() {
     byCountry: byCountry.results, daily: daily.results, votes: votes.results, topPlaces: topPlaces.results, events: events.results });
 }
 
-type Body = { action: string; id?: string; ids?: string[]; value?: boolean; userId?: string };
+type Body = { action: string; id?: string; ids?: string[]; value?: boolean; userId?: string; quota?: number };
 
 export async function POST(req: NextRequest) {
   const admin = await currentAdmin();
@@ -79,6 +81,21 @@ export async function POST(req: NextRequest) {
         DB.prepare('UPDATE users SET banned = ? WHERE id = ?').bind(b.value ? 1 : 0, b.id),
         DB.prepare('UPDATE reports SET hidden = ? WHERE user_id = ?').bind(b.value ? 1 : 0, b.id),
         ...(b.value ? [DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(b.id)] : []),
+      ]);
+      return NextResponse.json({ ok: true });
+    case 'setQuota': {
+      // How many invite links this user may create in total (used + open). 0 stops new invites.
+      if (!b.id || typeof b.quota !== 'number') break;
+      const q = Math.max(0, Math.min(1000, Math.round(b.quota)));
+      await DB.prepare('UPDATE users SET invite_quota = ? WHERE id = ?').bind(q, b.id).run();
+      return NextResponse.json({ ok: true, quota: q });
+    }
+    case 'revokeInvites':
+      // Cancel this user's unused links (people who already joined stay).
+      if (!b.id) break;
+      await DB.batch([
+        DB.prepare('UPDATE invites SET revoked = 1 WHERE inviter_id = ? AND used_by IS NULL').bind(b.id),
+        ...(b.value ? [DB.prepare('UPDATE users SET invite_quota = 0 WHERE id = ?').bind(b.id)] : []),
       ]);
       return NextResponse.json({ ok: true });
     case 'resetViews':
