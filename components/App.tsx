@@ -4,7 +4,8 @@ import dynamic from 'next/dynamic';
 import { track } from '@/lib/track';
 import { countryAt, localityAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, suggestPlaces, type Area, type Place, type Suggestion } from '@/lib/places';
 import { currencyFor, currencyName, flagOf, FLAG_BY_CURRENCY, formatMoney } from '@/lib/currency';
-import { drawShareCard, shareText, type ShareInfo } from '@/lib/shareCard';
+import type { ShareInfo } from '@/lib/shareCard';
+import { ROOM_HE, KIND_ICON, curFlag, money, dist, median, monthLabel, lastMonths, Sheet, WhatsAppIcon, SLOGAN, type Report, readA2hs, writeA2hs, isStandalone, isIOS, canOfferA2hs, ShareGlyph } from '@/components/ui';
 import { placePath, SITE_URL } from '@/lib/placeUrl';
 import { BOOT_HTML, BOOT_JS } from '@/lib/boot';
 
@@ -12,26 +13,17 @@ export type { Photo };
 export type InitialPlace = Place & { locality?: string; region?: string; reports?: number; photo?: Photo | null };
 
 const GITHUB_URL = 'https://github.com/YuvalHir/israeli-stay-prices';
-const SLOGAN = 'התמקחת? ספר לחבריך';
 type Disp = 'local' | 'USD' | 'ILS';
 
 type Me = { user: { name: string | null; email: string } | null; isAdmin?: boolean; reports?: number; likes?: number; searchesLeft?: number; anonLeft?: number; unlimited?: boolean };
-type Report = {
-  id: string; place_name: string; price: number; currency: string; country?: string | null; room: 'dorm' | 'private'; nights: number;
-  stay_month: string; note: string | null; up?: number; down?: number; my_vote?: number | null; mine_report?: number;
-};
 
 const GoogleMapCard = dynamic(() => import('@/components/GoogleMapCard'), { ssr: false });
+const ReportForm = dynamic(() => import('@/components/Extras').then(m => m.ReportForm), { ssr: false });
+const ShareSheet = dynamic(() => import('@/components/Extras').then(m => m.ShareSheet), { ssr: false });
+const InstallSheet = dynamic(() => import('@/components/Extras').then(m => m.InstallSheet), { ssr: false });
+const AccountSheet = dynamic(() => import('@/components/Extras').then(m => m.AccountSheet), { ssr: false });
 const StayMap = dynamic(() => import('@/components/StayMap'), { ssr: false, loading: () => <div className="map map-loading">טוען מפה…</div> });
 
-const ROOM_HE = { dorm: 'מיטה בדורם', private: 'חדר פרטי' } as const;
-const KIND_ICON: Record<string, string> = { hotel: '🏨', guest_house: '🏡', hostel: '🛏️', alpine_hut: '🏔️', motel: '🛣️' };
-const curFlag = (c: string, country?: string | null) => country && currencyFor(country) === c ? flagOf(country) : (FLAG_BY_CURRENCY[c] ?? '💱');
-const money = (price: number, c: string) => formatMoney(price, c);
-const dist = (d?: number) => d == null ? '' : d < 1 ? `${Math.round(d * 1000)} מ׳` : `${d.toFixed(1)} ק״מ`;
-const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b), m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
-const monthLabel = (ym: string) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' }); };
-const lastMonths = () => Array.from({ length: 12 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
 
 function GitHubIcon() {
   return <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg>;
@@ -77,152 +69,6 @@ function PhotoCredit({ photo }: { photo: Photo }) {
     <bdi><a href={photo.page} target="_blank" rel="noopener">{photo.author}</a></bdi> · {photo.licenseUrl ? <a href={photo.licenseUrl} target="_blank" rel="noopener"><bdi>{photo.license}</bdi></a> : <bdi>{photo.license}</bdi>} · Wikimedia Commons</p>;
 }
 
-function ReportForm({ place, area, country, onDone, onCancel }: { place: Place | null; area: string; country: string | null; onDone: (msg: string, share?: ShareInfo) => void; onCancel: () => void }) {
-  const local = currencyFor(country);
-  const options = Array.from(new Set([local, 'USD', 'ILS']));
-  const [name, setName] = useState(place?.name ?? '');
-  const [price, setPrice] = useState('');
-  const [currency, setCurrency] = useState<string>(local);
-  const [room, setRoom] = useState<Report['room']>('private');
-  const [nights, setNights] = useState(1);
-  const [month, setMonth] = useState(lastMonths()[0]);
-  const [note, setNote] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const submit = async () => {
-    const p = Number(price.replace(/[^\d.]/g, ''));
-    if (!name.trim()) return setError('חסר שם המקום.');
-    if (!(p > 0)) return setError('חסר מחיר ללילה.');
-    setBusy(true); setError('');
-    const res = await fetch('/api/reports', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ placeId: place?.id, placeName: name, placeKind: place?.kind, lat: place?.lat, lon: place?.lon, area, country, price: p, currency, room, nights, stayMonth: month, note }),
-    });
-    if (!res.ok) { setBusy(false); return setError(res.status === 401 ? 'צריך להתחבר קודם.' : res.status === 409 ? 'כבר דיווחת על המקום הזה לחודש הזה. אפשר לדווח שוב על חודש אחר.' : res.status === 429 ? 'הגעת למגבלת הדיווחים להיום. נסה שוב מחר.' : 'השמירה לא הצליחה. נסה שוב.'); }
-    setBusy(false); try { navigator.vibrate?.([12, 40, 18]); } catch {} onDone('תודה! המחיר נשמר, וקיבלת 5 חיפושים עם מחירים.', { placeName: name.trim(), price: p, currency, country, room, nights, month, lat: place?.lat, lon: place?.lon });
-  };
-  return <section className="card form">
-    <div className="form-head"><button className="icon-btn" onClick={onCancel} aria-label="חזרה">→</button><div><h2>כמה שילמת ללילה?</h2><p className="muted small form-sub">{SLOGAN} 😉</p></div></div>
-    {place ? <p className="muted">{KIND_ICON[place.kind] ?? '🏠'} {place.name} · {kindLabel(place.kind)}</p> :
-      <label className="field"><span>שם המקום</span><input value={name} onChange={e => setName(e.target.value)} placeholder="למשל Hotel Yog" /></label>}
-    <label className="field"><span>מחיר ללילה</span>
-      <div className="price-input"><input inputMode="decimal" dir="ltr" autoFocus={!!place} value={price} onChange={e => setPrice(e.target.value)} placeholder="0" /><b>{curFlag(currency, country)} {currency}</b></div>
-    </label>
-    <div className="field"><span>מטבע</span>
-      <div className="seg">{options.map(c => <button key={c} className={currency === c ? 'on' : ''} onClick={() => setCurrency(c)}>{curFlag(c, country)} {c === 'USD' ? 'דולר' : c === 'ILS' ? 'שקל' : currencyName(c)}</button>)}</div></div>
-    <div className="field"><span>סוג לינה</span>
-      <div className="seg">{(['private', 'dorm'] as const).map(r => <button key={r} className={room === r ? 'on' : ''} onClick={() => setRoom(r)}>{ROOM_HE[r]}</button>)}</div></div>
-    <div className="two">
-      <div className="field"><span>כמה לילות</span>
-        <div className="stepper"><button onClick={() => setNights(Math.max(1, nights - 1))} aria-label="פחות">−</button><b key={nights} className="tick">{nights}</b><button onClick={() => setNights(Math.min(60, nights + 1))} aria-label="יותר">+</button></div></div>
-      <label className="field"><span>מתי</span>
-        <select value={month} onChange={e => setMonth(e.target.value)}>{lastMonths().map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}</select></label>
-    </div>
-    <label className="field"><span>הערה (לא חובה)</span><input value={note} onChange={e => setNote(e.target.value)} placeholder="למשל: כולל ארוחת בוקר, התמקחתי מ-2000" /></label>
-    {error && <div className="note warn">{error}</div>}
-    <div className="form-actions"><button className="btn primary block big" disabled={busy} onClick={submit}>{busy ? <span className="spinner" aria-hidden="true" /> : null}{busy ? 'שומר…' : 'שמור מחיר'}</button>
-    <p className="muted small center anon-note">🔒 הדיווח מוצג בלי שם ובלי מייל.</p></div>
-  </section>;
-}
-
-
-function ShareSheet({ info, onClose }: { info: ShareInfo; onClose: () => void }) {
-  const [blob, setBlob] = useState<Blob | null>(null);
-  const [url, setUrl] = useState('');
-  useEffect(() => {
-    let u = '';
-    drawShareCard(info).then(b => { setBlob(b); u = URL.createObjectURL(b); setUrl(u); }).catch(() => {});
-    return () => { if (u) URL.revokeObjectURL(u); };
-  }, [info]);
-  const text = shareText(info);
-  const file = blob ? new File([blob], 'mechir-lalayla.png', { type: 'image/png' }) : null;
-  const canShareFile = !!file && typeof navigator !== 'undefined' && !!navigator.canShare?.({ files: [file] });
-  const share = async () => {
-    track('share');
-    if (canShareFile && file) { try { await navigator.share({ files: [file], text }); return; } catch (e: any) { if (e?.name === 'AbortError') return; } }
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-  };
-  return <Sheet onClose={onClose} className="share-sheet">{dismiss => <>
-      <h2>ספר לחבריך 😉</h2>
-      <p>שלח לקבוצת הטיול. ככה עוד חברים יידעו כמה לשלם, ויוסיפו מחירים משלהם.</p>
-      <div className="share-preview">{url ? <img src={url} alt="כרטיס שיתוף עם המחיר ששילמת" /> : <div className="skeleton share-skel" />}</div>
-      <button className="btn wa block big" onClick={share} disabled={!blob}><WhatsAppIcon /> שתף בוואטסאפ</button>
-      {!canShareFile && url && <a className="btn block" href={url} download="mechir-lalayla.png">⬇️ שמור את התמונה</a>}
-      <button className="btn ghost block" onClick={dismiss}>אחר כך</button>
-    </>}</Sheet>;
-}
-
-/** Add-to-home-screen offer: native prompt on Android/Chrome, instructions on iOS. Shown at a good moment, never when installed. */
-const A2HS_KEY = 'sp_a2hs';
-type A2hsState = { dismissed: number; last: number; installed?: boolean };
-const readA2hs = (): A2hsState => { try { return { dismissed: 0, last: 0, ...JSON.parse(localStorage.getItem(A2HS_KEY) ?? '{}') }; } catch { return { dismissed: 0, last: 0 }; } };
-const writeA2hs = (v: A2hsState) => { try { localStorage.setItem(A2HS_KEY, JSON.stringify(v)); } catch {} };
-const isStandalone = () => typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true);
-const isIOS = () => typeof navigator !== 'undefined' && (/iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-const canOfferA2hs = () => { const st = readA2hs(); return !isStandalone() && !st.installed && st.dismissed < 3 && Date.now() - st.last > 14 * 864e5; };
-
-function ShareGlyph() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-4px' }}><path d="M12 3v12" /><path d="m8 7 4-4 4 4" /><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1" /></svg>;
-}
-
-function InstallSheet({ ios, onInstall, onClose }: { ios: boolean; onInstall: () => void; onClose: () => void }) {
-  const safari = ios && !/CriOS|FxiOS|EdgiOS|GSA\//.test(navigator.userAgent);
-  return <Sheet onClose={onClose}>{dismiss => <>
-      <div className="sheet-step">
-        <img className="a2hs-icon" src="/icons/v2/icon-96.webp" alt="" />
-        <h2>שים את מחיר ללילה במסך הבית</h2>
-        <p>נפתח בלחיצה כמו אפליקציה, במסך מלא, בלי לחפש את הלינק. בלי חנות ובלי הורדה.</p>
-      </div>
-      {ios ? <ol className="a2hs-steps">
-        <li><span>1</span><div>לוחצים על כפתור השיתוף <b className="a2hs-glyph"><ShareGlyph /></b> {safari ? 'בסרגל של ספארי' : 'בדפדפן (בכרום הוא ליד שורת הכתובת)'}</div></li>
-        <li><span>2</span><div>גוללים ובוחרים <b>״הוספה למסך הבית״</b> <b className="a2hs-glyph">⊞</b></div></li>
-        <li><span>3</span><div>לוחצים <b>״הוספה״</b> למעלה, וזהו</div></li>
-      </ol>
-      : <button className="btn primary block big" onClick={onInstall}>📲 הוסף למסך הבית</button>}
-      <button className="btn ghost block" onClick={dismiss}>{ios ? 'הבנתי' : 'לא עכשיו'}</button>
-    </>}</Sheet>;
-}
-
-/**
- * Bottom sheet with iOS-like manners: slides away on close instead of vanishing,
- * and can be dragged down to dismiss. `children` gets a `dismiss` that animates out first.
- */
-type InviteState = { invites: { code: string; created_at: string; used: boolean; revoked: boolean; used_name: string | null }[]; quota: number; left: number; unlimited: boolean };
-/** Account sheet: personal invite links (single use, 10 per person) and sign out. */
-function AccountSheet({ me, onClose, onLogout, say }: { me: { name?: string | null; email?: string }; onClose: () => void; onLogout: () => void; say: (m: string) => void }) {
-  const [st, setSt] = useState<InviteState | null>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { fetch('/api/invites').then(r => r.ok ? r.json() : null).then(setSt).catch(() => {}); }, []);
-  const link = (c: string) => `${SITE_URL}/i/${c}`;
-  const send = async (code: string) => {
-    const url = link(code); const text = 'הזמנה אישית לאתר של ישראלים שמשתפים כמה שילמו על לינה 🏡 הקישור עובד פעם אחת:';
-    track('share');
-    if (navigator.share) { try { await navigator.share({ text, url }); return; } catch (e: any) { if (e?.name === 'AbortError') return; } }
-    try { await navigator.clipboard.writeText(`${text} ${url}`); say('קישור ההזמנה הועתק 👍'); } catch { say(url); }
-  };
-  const create = async () => {
-    setBusy(true);
-    const r = await fetch('/api/invites', { method: 'POST' }).catch(() => null);
-    const j = r ? await r.json().catch(() => null) : null; setBusy(false);
-    if (!r?.ok || !j?.code) { say(j?.error === 'no_invites_left' ? 'נגמרו ההזמנות שלך' : 'לא הצלחתי ליצור קישור. נסה שוב.'); return; }
-    setSt(j); send(j.code);
-  };
-  const open = st?.invites.filter(i => !i.used && !i.revoked) ?? [];
-  const used = st?.invites.filter(i => i.used) ?? [];
-  return <Sheet onClose={onClose} className="acct-sheet">{dismiss => <>
-    <div className="sheet-step"><div className="sheet-icon">🎟️</div><h2>הזמן חברים</h2>
-      <p>האתר כרגע בהזמנה בלבד. כל קישור אישי עובד פעם אחת, וכל מי שמצטרף מקבל 10 הזמנות משלו.</p></div>
-    {!st ? <div className="skeleton row-skel" /> : <>
-      <div className="inv-count"><b>{st.unlimited ? '∞' : st.left}</b><span>{st.unlimited ? 'הזמנות ללא הגבלה (אדמין)' : `הזמנות נשארו מתוך ${st.quota}`}</span></div>
-      <button className="btn primary block" disabled={busy || st.left <= 0} onClick={create}>{busy ? 'יוצר קישור…' : st.left > 0 ? 'צור קישור הזמנה ושלח' : 'נגמרו ההזמנות'}</button>
-      {open.length > 0 && <><h3 className="inv-h">קישורים שעוד לא נוצלו</h3><ul className="inv-list">{open.slice(0, 10).map(i => <li key={i.code}><code dir="ltr">/i/{i.code}</code><button className="chip" onClick={() => send(i.code)}>שלח שוב</button></li>)}</ul></>}
-      {used.length > 0 && <><h3 className="inv-h">הצטרפו דרכך</h3><ul className="inv-list">{used.map(i => <li key={i.code}><span>✅ {i.used_name ?? 'מישהו'}</span></li>)}</ul></>}
-    </>}
-    <p className="muted small center">מחובר כ-{me.email}</p>
-    <button className="btn ghost block" onClick={() => { dismiss(); onLogout(); }}>התנתק</button>
-  </>}</Sheet>;
-}
-
 /** Why we ask for Google sign-in. Shown before every sign-in. */
 function LoginNote({ onMore }: { onMore: () => void }) {
   return <div className="login-note"><span aria-hidden="true">🔒</span><p>
@@ -240,53 +86,6 @@ const PRIVACY_ITEMS: [string, string, string][] = [
   ['📊', 'סטטיסטיקה', 'ספירה יומית אנונימית של פעולות באתר, ו-Cloudflare Web Analytics בלי עוגיות.'],
 ];
 
-function Sheet({ onClose, className = '', children }: { onClose?: () => void; className?: string; children: (dismiss: () => void) => React.ReactNode }) {
-  const [closing, setClosing] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const done = useRef(false);
-  const dismiss = () => {
-    if (!onClose || done.current) return;
-    done.current = true; setClosing(true);
-    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    setTimeout(onClose, reduce ? 0 : 260);
-  };
-  useEffect(() => {
-    const el = ref.current; if (!el || !onClose) return;
-    let y0 = 0, x0 = 0, t0 = 0, dy = 0, active = false, dragging = false;
-    const start = (e: TouchEvent) => {
-      const t = e.target as HTMLElement;
-      const scroller = t.closest('.sleep-list, .ac-list') as HTMLElement | null;
-      if ((scroller && scroller.scrollTop > 0) || el.scrollTop > 0 || t.closest('input, textarea, select')) { active = false; return; }
-      active = true; dragging = false; dy = 0; y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; t0 = Date.now();
-    };
-    const move = (e: TouchEvent) => {
-      if (!active) return;
-      const d = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
-      // Claim downward moves from the very first frame: once iOS starts its own scroll/bounce, later preventDefault calls are ignored.
-      if (!dragging && d > 0 && d >= dx && e.cancelable) e.preventDefault();
-      if (!dragging) { if (d > 8 && d > dx) { dragging = true; el.style.transition = 'none'; } else if (d < -4 || dx > 8) { active = false; return; } else return; }
-      dy = Math.max(0, d); if (e.cancelable) e.preventDefault();
-      el.style.transform = `translateY(${dy}px)`;
-    };
-    const end = () => {
-      if (!active) return; active = false; if (!dragging) return;
-      const v = dy / Math.max(1, Date.now() - t0);
-      el.style.transition = 'transform .32s cubic-bezier(.2,.9,.3,1.1)';
-      if (dy > 110 || v > 0.6) dismiss(); else el.style.transform = '';
-    };
-    el.addEventListener('touchstart', start, { passive: true });
-    el.addEventListener('touchmove', move, { passive: false });
-    el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
-    return () => { el.removeEventListener('touchstart', start); el.removeEventListener('touchmove', move); el.removeEventListener('touchend', end); el.removeEventListener('touchcancel', end); };
-  }, [onClose]);
-  return <div className={`sheet-backdrop${closing ? ' closing' : ''}`} role="dialog" aria-modal="true" onClick={dismiss}>
-    <div ref={ref} className={`sheet ${className}`} onClick={e => e.stopPropagation()}>{children(dismiss)}</div>
-  </div>;
-}
-
-function WhatsAppIcon() {
-  return <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z"/></svg>;
-}
 
 export default function App({ initialPlace = null }: { initialPlace?: InitialPlace | null }) {
   const [me, setMe] = useState<Me | null>(null);
