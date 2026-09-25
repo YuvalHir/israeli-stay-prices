@@ -99,7 +99,7 @@ function Events({ rows, days }: { rows: { day: string; name: string; n: number }
     const w = vals.slice(-7).reduce((a, b) => a + b, 0), prev = vals.slice(-14, -7).reduce((a, b) => a + b, 0);
     return { k, vals, w, prev, total: vals.reduce((a, b) => a + b, 0) };
   }).sort((a, b) => b.w - a.w || b.total - a.total);
-  return <section className="adm-card"><h2>פעולות באתר</h2><p className="muted small">ספירה אנונימית ליום, בלי משתמש ובלי IP. 7 ימים אחרונים מול השבוע שלפני.</p>
+  return <section className="adm-card"><h2>פעולות באתר</h2><p className="muted small">ספירה אנונימית ליום, בלי שם משתמש ובלי כתובת. המספר: השבוע האחרון, והחץ: שינוי מול השבוע שלפני.</p>
     <ul className="adm-events">{list.map(x => <li key={x.k}>
       <span className="ev-name">{EVENTS[x.k]}</span>
       <b className="ev-n">{x.w.toLocaleString('en-US')}</b>
