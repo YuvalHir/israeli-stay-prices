@@ -3,6 +3,9 @@
   "name": "israeli-stay-prices",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-09-01",
+  // Only the main workers.dev URL serves the app; no per-version preview URLs.
+  "workers_dev": true,
+  "preview_urls": false,
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "d1_databases": [
