@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://upload.wikimedia.org https://thumb.wikimedia.org https://commons.wikimedia.org https://cdn.jsdelivr.net",
+      "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://upload.wikimedia.org https://thumb.wikimedia.org https://commons.wikimedia.org https://cdn.jsdelivr.net https://www.google.com https://*.gstatic.com",
       "font-src 'self'",
       "connect-src 'self' https://photon.komoot.io https://nominatim.openstreetmap.org https://overpass-api.de https://overpass.private.coffee https://cloudflareinsights.com https://static.cloudflareinsights.com https://cdn.jsdelivr.net https://commons.wikimedia.org https://www.wikidata.org https://en.wikipedia.org https://upload.wikimedia.org",
       "frame-src https://maps.google.com https://www.google.com",
