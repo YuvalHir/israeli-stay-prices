@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { Heebo } from 'next/font/google';
 import './globals.css';
 
-const heebo = Heebo({ subsets: ['hebrew', 'latin'], weight: ['400', '500', '700', '800'], display: 'swap' });
+// Variable font (one file per script); only Hebrew is preloaded so it doesn't compete with the app on weak signal.
+const heebo = Heebo({ subsets: ['hebrew'], display: 'swap', adjustFontFallback: true });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://israeli-stay-prices.hyuval1511.workers.dev'),
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
   },
   twitter: { card: 'summary_large_image', title: 'כמה ישראלים שילמו ללילה? 👀', description: 'התמקחת? ספר לחבריך.', images: ['/og.jpg'] },
   appleWebApp: { capable: true, title: 'מחיר ללילה', statusBarStyle: 'default' },
-  icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
+  icons: { icon: '/icons/favicon-32.png', apple: '/icons/apple-touch-icon.png' },
 };
 export const viewport: Viewport = { themeColor: '#f6f3ee', width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 

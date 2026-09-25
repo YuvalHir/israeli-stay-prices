@@ -456,7 +456,7 @@ button.adm-pill { cursor: pointer; }
 .hero { padding-top: 0; }
 .sheet { overscroll-behavior-y: none; }
 /* Speed: light WebP hero (49KB on phones instead of a 200KB JPEG) */
-.hero-photo { background-image: linear-gradient(180deg, rgba(14,12,10,.35) 0%, rgba(14,12,10,.05) 30%, rgba(14,12,10,.85) 100%), url(/teahouse-720.webp); background-color: #3a2f27; }
+.hero-photo { background-image: linear-gradient(180deg, rgba(14,12,10,.35) 0%, rgba(14,12,10,.05) 30%, rgba(14,12,10,.85) 100%), url(/teahouse-480.webp); background-color: #3a2f27; }
 @media (min-width: 600px) { .hero-photo { background-image: linear-gradient(180deg, rgba(14,12,10,.35) 0%, rgba(14,12,10,.05) 30%, rgba(14,12,10,.85) 100%), url(/teahouse.webp); } }
 /* Auth/prices still resolving: neutral placeholders instead of a false "locked" */
 .badge.price-wait { width: 64px; height: 34px; border-radius: 999px; background: linear-gradient(90deg, var(--sand) 25%, #f8f4ee 50%, var(--sand) 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
