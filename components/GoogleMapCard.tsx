@@ -30,6 +30,12 @@ export default function GoogleMapCard({ name, lat, lon, locality }: { name: stri
     return () => io.disconnect();
   }, [name, lat, lon]);
 
+  if (!KEY) return <a className="card gmap-row" href={link} target="_blank" rel="noopener">
+    <span className="gmap-pin" aria-hidden="true">📍</span>
+    <span className="gmap-txt"><b>פתח בגוגל מפות</b><span className="muted small">תמונות, ביקורות ומסלול</span></span>
+    <span aria-hidden="true">↗</span>
+  </a>;
+
   return <section className="card gmap" ref={box} aria-label="המקום בגוגל מפות">
     <div className="gmap-frame">
       {show && <iframe title={`${name} בגוגל מפות`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen onLoad={() => setLoaded(true)}
