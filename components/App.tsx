@@ -6,6 +6,7 @@ import { countryAt, localityAt, findArea, kindLabel, nearbyStays, QUICK_AREAS, s
 import { currencyFor, currencyName, flagOf, FLAG_BY_CURRENCY, formatMoney } from '@/lib/currency';
 import { drawShareCard, shareText, type ShareInfo } from '@/lib/shareCard';
 import { placePath, SITE_URL } from '@/lib/placeUrl';
+import { BOOT_HTML, BOOT_JS } from '@/lib/boot';
 
 export type { Photo };
 export type InitialPlace = Place & { locality?: string; region?: string; reports?: number; photo?: Photo | null };
@@ -315,6 +316,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const [onboarding, setOnboarding] = useState(false);
   const [step, setStep] = useState(0);
   const [picker, setPicker] = useState(false);
+  const [bootOn, setBootOn] = useState(true); // the pre-React search box (lib/boot.ts)
   const [onlyKnown, setOnlyKnown] = useState(false);
   const [ipCountry, setIpCountry] = useState<string | null>(null);
   const [rates, setRates] = useState<Record<string, number> | null>(null);
@@ -505,7 +507,18 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     if (inv === 'bad') say('קישור ההזמנה כבר נוצל או בוטל. בקש קישור חדש ממי ששלח לך.');
     if (lp || inv) history.replaceState(null, '', '/');
     let seen = false; try { seen = localStorage.getItem('sp_onboarded') === '1'; } catch {}
-    if (initialPlace) {
+    // Hand-off from the pre-React search box: finish its pick, or move its text into the real picker.
+    const W = window as any; W.__hyd = true;
+    const bootEl = document.getElementById('boot'), bootIn = bootEl?.querySelector('input');
+    const bootPick = W.__boot?.pick as Suggestion | undefined, bootOpen = !!bootEl && !bootEl.hidden;
+    const endBoot = () => { W.__bootGone = true; setBootOn(false); };
+    W.__bootPick = (sg: Suggestion) => { endBoot(); window.scrollTo({ top: 0 }); try { localStorage.setItem('sp_onboarded', '1'); } catch {} pickSug(sg); };
+    W.__bootBlur = (v: string) => { endBoot(); setPicker(true); if (v.trim()) { setSearch(v); setSugOpen(true); } };
+    if (bootPick) W.__bootPick(bootPick);
+    else if (bootOpen && document.activeElement !== bootIn) W.__bootBlur(bootIn?.value ?? '');
+    else if (!bootOpen) endBoot();
+    if (bootPick || bootOpen) { /* the user is already searching */ }
+    else if (initialPlace) {
       history.replaceState({ place: initialPlace }, '', location.pathname);
       openPlace(initialPlace, false);
       if (Number.isFinite(initialPlace.lat)) loadArea({ name: initialPlace.locality ?? initialPlace.name, lat: initialPlace.lat, lon: initialPlace.lon, country: initialPlace.country }, true);
@@ -808,6 +821,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         </div>
       </div>
       <main className="wrap">
+        {bootOn && <><div id="boot" hidden suppressHydrationWarning dangerouslySetInnerHTML={{ __html: BOOT_HTML }} /><script dangerouslySetInnerHTML={{ __html: BOOT_JS }} /></>}
         {(picker || status === 'error') && <section className="card"><h2>לאן?</h2>{Picker}</section>}
         <h2 className="section-title">איך זה עובד</h2>
         <section className="steps">

@@ -113,7 +113,7 @@ export const QUICK_AREAS: Area[] = [
 
 // Popular destinations with Hebrew names, for Hebrew autocomplete (coordinates from OpenStreetMap Nominatim, 24 Sep 2026).
 export type Suggestion = Area & { sub?: string; type?: 'area' | 'stay'; placeId?: string; kind?: string; city?: string };
-const HE_PLACES: (Area & { en: string })[] = [
+export const HE_PLACES: (Area & { en: string })[] = [
   { name: 'קטמנדו', en: "Kathmandu Metropolitan City", lat: 27.7083, lon: 85.3206, country: 'NP' },
   { name: 'פוקרה', en: "Pokhara", lat: 28.2095, lon: 83.9914, country: 'NP' },
   { name: 'נמצ׳ה בזאר', en: "Namche Bazaar", lat: 27.8042, lon: 86.7098, country: 'NP' },
@@ -165,7 +165,7 @@ const norm = (t: string) => t.replace(/[׳'"`]/g, '').trim().toLowerCase();
 
 /** Autocomplete: Hebrew list first, then worldwide places from Photon (OpenStreetMap). */
 /** Backpacker neighbourhoods Photon often misses or misspells (Thamle -> Thamel). */
-const HOODS: (Area & { en: string })[] = [
+export const HOODS: (Area & { en: string })[] = [
   { name: 'תמל, קטמנדו', en: 'Thamel', lat: 27.7167, lon: 85.3127, country: 'NP' },
   { name: 'לייקסייד, פוקרה', en: 'Lakeside Pokhara', lat: 28.2211, lon: 83.9583, country: 'NP' },
   { name: 'חאו סן, בנגקוק', en: 'Khao San Road', lat: 13.7589, lon: 100.4973, country: 'TH' },

@@ -535,3 +535,4 @@ button.adm-pill { cursor: pointer; }
 .privacy-list b { display: block; color: var(--ink); font-size: 14.5px; }
 .returning { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line, rgba(0,0,0,.08)); }
 .returning-h { margin: 0 0 8px; font-weight: 700; font-size: 14px; }
+.boot-wait { margin: 10px 2px 0; color: var(--ink2); font-size: 14px; }
