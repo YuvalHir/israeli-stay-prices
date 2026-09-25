@@ -9,9 +9,12 @@ import { ROOM_HE, KIND_ICON, curFlag, money, dist, median, monthLabel, lastMonth
 import { placePath, SITE_URL } from '@/lib/placeUrl';
 import { BOOT_HTML, BOOT_JS } from '@/lib/boot';
 import { trekDealRegion, matchesRoomDeal } from '@/lib/trekDeal';
-import { clearOfflinePacks } from '@/lib/offlinePack';
+import { clearOfflinePacks, listOfflinePacks } from '@/lib/offlinePack';
+import { offlineNearby } from '@/lib/offlineNearby';
 import { reportAgeDays, freshnessLabel, weightedMedian } from '@/lib/freshness';
 import { clearPendingReports, syncPendingReports } from '@/lib/offlineReports';
+import OfflineTreks from '@/components/OfflineTreks';
+import { ReportForm } from '@/components/Extras';
 
 export type { Photo };
 export type InitialPlace = Place & { locality?: string; region?: string; reports?: number; photo?: Photo | null };
@@ -22,12 +25,10 @@ type Disp = 'local' | 'USD' | 'ILS';
 type Me = { user: { name: string | null; email: string } | null; isAdmin?: boolean; reports?: number; likes?: number; searchesLeft?: number; anonLeft?: number; unlimited?: boolean };
 
 const GoogleMapCard = dynamic(() => import('@/components/GoogleMapCard'), { ssr: false });
-const ReportForm = dynamic(() => import('@/components/Extras').then(m => m.ReportForm), { ssr: false });
 const ShareSheet = dynamic(() => import('@/components/Extras').then(m => m.ShareSheet), { ssr: false });
 const InstallSheet = dynamic(() => import('@/components/Extras').then(m => m.InstallSheet), { ssr: false });
 const AccountSheet = dynamic(() => import('@/components/Extras').then(m => m.AccountSheet), { ssr: false });
 const StayMap = dynamic(() => import('@/components/StayMap'), { ssr: false, loading: () => <div className="map map-loading">טוען מפה…</div> });
-const OfflineTreks = dynamic(() => import('@/components/OfflineTreks'), { ssr: false });
 
 
 function GitHubIcon() {
@@ -129,7 +130,10 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const [offlineOpen, setOfflineOpen] = useState(false);
   const [offlineOwner, setOfflineOwner] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
-  useEffect(() => { const update = () => { setOnline(navigator.onLine); setOfflineOwner(!navigator.onLine ? localStorage.getItem('sp_offline_owner') : null); }; update(); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); }; }, []);
+  const [offlineArea, setOfflineArea] = useState(false);
+  const [networkUnavailable, setNetworkUnavailable] = useState(false);
+  const offlineNow = !online || networkUnavailable;
+  useEffect(() => { const update = () => { setOnline(navigator.onLine); if (navigator.onLine) setNetworkUnavailable(false); setOfflineOwner(localStorage.getItem('sp_offline_owner')); }; update(); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); }; }, []);
   useEffect(() => { const sync = () => syncPendingReports().then(r => { if (r.sent) say(`${r.sent} דיווחים מהאופליין עלו לאתר.`); }).catch(() => {}); window.addEventListener('online', sync); if (navigator.onLine) sync(); return () => window.removeEventListener('online', sync); }, []);
   const [ipCountry, setIpCountry] = useState<string | null>(null);
   const [rates, setRates] = useState<Record<string, number> | null>(null);
@@ -240,7 +244,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     setToastOut(false); setToast(m);
     toastTimers.current.push(setTimeout(() => hideToast(m), 4200));
   };
-  const refreshMe = () => fetch('/api/auth/me').then(r => r.json()).then((m: Me) => { setMe(m); try { localStorage.setItem('sp_me_hint', JSON.stringify(m.user ? { n: (m.user.name ?? m.user.email ?? '?').trim()[0] } : {})); if (m.user) { localStorage.setItem('sp_offline_owner', m.user.email); localStorage.setItem('sp_member', '1'); setCanJoin(true); } } catch {} return m; }).catch(() => { const m = { user: null }; setMe(m); return m as Me; });
+  const refreshMe = () => fetch('/api/auth/me').then(r => { if (!r.ok) throw new Error('auth unavailable'); return r.json(); }).then((m: Me) => { setNetworkUnavailable(false); setMe(m); try { localStorage.setItem('sp_me_hint', JSON.stringify(m.user ? { n: (m.user.name ?? m.user.email ?? '?').trim()[0] } : {})); if (m.user) { localStorage.setItem('sp_offline_owner', m.user.email); localStorage.setItem('sp_member', '1'); setCanJoin(true); } } catch {} return m; }).catch(() => { setNetworkUnavailable(true); return { user: null } as Me; });
   const loadListPrices = (list: Place[], sid: string | null) => {
     if (!list.length) return Promise.resolve();
     return fetch(`/api/reports?placeIds=${encodeURIComponent(list.map(p => p.id).join(','))}${sid ? `&searchId=${sid}` : ''}`)
@@ -262,7 +266,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     track('area_view');
     if (GENERIC.includes(a.name)) localityAt(a.lat, a.lon).then(l => { if (l) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, label: l.name, country: cur.country ?? l.country } : cur); });
     if (!a.country) countryAt(a.lat, a.lon).then(c => { if (c) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, country: c } : cur); });
-    setListPrices({}); setListFeatures({}); setBedsFilter(null); setDealFilter(false); setSearchId(null); setPricesLoading(true); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
+    setOfflineArea(false); setListPrices({}); setListFeatures({}); setBedsFilter(null); setDealFilter(false); setSearchId(null); setPricesLoading(true); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
     try {
       // One edge request for places + counts; the direct OSM lookup is only the fallback.
       // The pre-React script may already have asked for this exact area (shared link or early pick).
@@ -290,11 +294,36 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       if (areaRef.current === a) setPricesLoading(false);
     } catch { setPricesLoading(false); setStatus('error'); setMessage('החיפוש במפה לא הצליח (אולי אין קליטה). נסה שוב או בחר אזור.'); }
   };
+  const loadOfflineNearby = async (lat: number, lon: number) => {
+    const owner = localStorage.getItem('sp_offline_owner');
+    const packs = await listOfflinePacks();
+    setNetworkUnavailable(true);
+    const nearby = offlineNearby(packs, owner, lat, lon);
+    const hasPack = !!owner && packs.some(p => p.owner === owner);
+    const hasValidPrices = nearby.some(x => x.prices.length);
+    const a: Area = { name: 'המיקום שלך', lat, lon, country: 'NP' };
+    areaRef.current = a; setArea(a); setMyPos({ lat, lon }); setOpen(null); setReporting(null);
+    setOfflineArea(true); setSearchId(null); setPricesLoading(false); setPhotos({ places: {}, area: [] });
+    setBedsFilter(null); setDealFilter(false); setOnlyKnown(false); setPicker(false);
+    setPlaces(nearby.map(x => x.place));
+    setCounts(Object.fromEntries(nearby.map(x => [x.place.id, x.reports])));
+    setListPrices(Object.fromEntries(nearby.map(x => [x.place.id, x.prices.map(p => [p.price, p.currency, p.beds, p.israeliDeal] as [number, string, number | null, number])])));
+    setListFeatures(Object.fromEntries(nearby.map(x => [x.place.id, x.prices.map(p => [p.beds, p.israeliDeal] as [number | null, number])])));
+    setStatus('ready');
+    setMessage(nearby.length ? (hasValidPrices ? '📵 אופליין: מחירים שנשמרו במסלול בלבד. דיווח חדש יישמר במכשיר עד שתחזור הרשת.' : '📵 יש לודג׳ים שמורים לידך, אבל אין להם מחירים זמינים. אפשר לדווח גם בלי רשת.') :
+      hasPack ? '📵 אין לודג׳ים שמורים במרחק 2 ק״מ מהמיקום שלך. אפשר לדווח ידנית; מסלול חדש דורש רשת.' :
+      '📵 אין מסלול שמור במכשיר הזה. מחירים חדשים דורשים רשת; אפשר לדווח ידנית כשהחשבון נשמר במכשיר.');
+  };
+  const networkReady = async () => {
+    if (!navigator.onLine) return false;
+    try { const r = await fetch('/api/auth/me', { cache: 'no-store', signal: AbortSignal.timeout(2500) }); return r.ok; }
+    catch { setNetworkUnavailable(true); return false; }
+  };
   const locate = (silent = false) => {
     if (!navigator.geolocation) { if (!silent) setMessage('המכשיר לא מאפשר מיקום. בחר אזור.'); setPicker(true); return; }
     setStatus('locating'); setMessage('');
     navigator.geolocation.getCurrentPosition(
-      p => { const pos = { lat: p.coords.latitude, lon: p.coords.longitude }; setMyPos(pos); loadArea({ name: 'המיקום שלך', ...pos }); },
+      async p => { const pos = { lat: p.coords.latitude, lon: p.coords.longitude }; setMyPos(pos); if (!await networkReady()) loadOfflineNearby(pos.lat, pos.lon).catch(() => { setStatus('error'); setMessage('לא הצלחתי לקרוא את המסלול השמור מהמכשיר. אפשר עדיין לדווח ידנית.'); }); else loadArea({ name: 'המיקום שלך', ...pos }); },
       () => { setStatus('idle'); if (!silent) setMessage('לא קיבלתי מיקום. אפשר לאשר מיקום בהגדרות הדפדפן, או לבחור אזור.'); setPicker(true); },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 300000 });
   };
@@ -431,6 +460,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const afterReport = async (msg: string, share?: ShareInfo) => {
     const p = reporting;
     setReporting(null); say(msg);
+    if (offlineNow || !navigator.onLine) { setOfflineOpen(true); return; }
     if (share) setShareInfo(share);
     const m = await refreshMe();
     const sid = areaRef.current ? await startSearch(areaRef.current, m) : null;
@@ -441,12 +471,23 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   /** "I'm sleeping here now": fresh GPS -> nearest stays -> pick -> short report form. */
   const sleepHere = () => {
     track('sleep_tap');
-    if (!me?.user) { setLoginWhy('report'); setLoginPop(true); return; }
+    if (!me?.user && !localStorage.getItem('sp_offline_owner')) { if (offlineNow) { say('כדי לשמור דיווח אופליין צריך להתחבר פעם אחת כשיש רשת.'); return; } setLoginWhy('report'); setLoginPop(true); return; }
     if (!navigator.geolocation) { setReporting('manual'); return; }
     setSleepPick({ status: 'locating', places: [] });
     navigator.geolocation.getCurrentPosition(async pos => {
+      const hasNetwork = await networkReady();
+      if (!hasNetwork) setNetworkUnavailable(true);
       const { latitude: lat, longitude: lon } = pos.coords;
       setMyPos({ lat, lon });
+      if (!hasNetwork) {
+        const a: Area = { name: 'המיקום שלך', lat, lon, country: 'NP' };
+        areaRef.current = a; setArea(a);
+        try {
+          const nearby = offlineNearby(await listOfflinePacks(), localStorage.getItem('sp_offline_owner'), lat, lon, Date.now(), .6);
+          setSleepPick(nearby.length ? { status: 'ready', places: nearby.map(x => x.place).slice(0, 6) } : { status: 'error', places: [], msg: '📵 לא מצאתי מקום שמור במרחק 600 מטר. אפשר לדווח ידנית עם המיקום שלך; הדיווח יישמר במכשיר.' });
+        } catch { setSleepPick({ status: 'error', places: [], msg: 'לא הצלחתי לקרוא את המסלול מהמכשיר. אפשר לדווח ידנית.' }); }
+        return;
+      }
       const [near, country] = await Promise.all([nearbyStays(lat, lon, 600).catch(() => [] as Place[]), countryAt(lat, lon)]);
       const list = near.slice(0, 6).map(p => ({ ...p, country: p.country ?? country ?? undefined }));
       setSleepPick(list.length ? { status: 'ready', places: list } : { status: 'error', places: [], msg: 'לא מצאתי מקומות לינה במפה ממש לידך. אפשר לדווח ידנית.' });
@@ -502,8 +543,8 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const matchesPlace = (id: string) => !filterActive || (listFeatures[id] ?? []).some(([beds, israeli_deal]) => matchesRoomDeal({ beds, israeli_deal }, bedsFilter, dealFilter));
   const reportCountry = (reporting && reporting !== 'manual' ? reporting.country : null) ?? open?.country ?? area?.country ?? ipCountry;
   const loggedIn = !!me?.user;
-  const knownCount = places.filter(p => counts[p.id]).length;
-  const shown = places.filter(p => (!onlyKnown || counts[p.id]) && matchesPlace(p.id));
+  const knownCount = places.filter(p => counts[p.id] || (offlineArea && listPrices[p.id]?.length)).length;
+  const shown = places.filter(p => (!onlyKnown || counts[p.id] || (offlineArea && listPrices[p.id]?.length)) && matchesPlace(p.id));
   const showLanding = !area && !reporting && !open;
   // The landing photo was skipped for a shared area link (layout.tsx); allow it again once the list is up.
   useEffect(() => { if (area) document.documentElement.classList.remove('at-link'); }, [area]);
@@ -514,7 +555,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     set(); window.addEventListener('scroll', set, { passive: true });
     return () => { window.removeEventListener('scroll', set); meta.setAttribute('content', '#f6f3ee'); };
   }, [showLanding]);
-  const gate = !me || (loggedIn && pricesLoading && !me.unlimited) ? (meHint?.n || me?.user ? { t: 'טוען את המחירים שלך…', ok: true, wait: true } : null) : !loggedIn ? { t: `${me.anonLeft ?? 3} מתוך 3 צפיות חינם`, ok: (me.anonLeft ?? 3) > 0 }
+  const gate = offlineArea ? { t: '📵 מסלול שמור: מחירים מוצגים רק אם הם עדיין בתוקף', ok: true } : !me || (loggedIn && pricesLoading && !me.unlimited) ? (meHint?.n || me?.user ? { t: 'טוען את המחירים שלך…', ok: true, wait: true } : null) : !loggedIn ? { t: `${me.anonLeft ?? 3} מתוך 3 צפיות חינם`, ok: (me.anonLeft ?? 3) > 0 }
     : me.unlimited ? { t: 'אדמין · חיפושים ללא הגבלה', ok: true }
     : searchId ? { t: `המחירים באזור פתוחים · נשארו ${me.searchesLeft ?? 0} חיפושים`, ok: true }
     : { t: 'דווח מחיר או תן 👍 כדי לפתוח 5 חיפושים', ok: false };
@@ -594,7 +635,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         <div className="sheet-step"><div className="sheet-icon">😴</div><h2>איפה אתה ישן?</h2>
           {sleepPick.status === 'locating' && <p>מאתר את המיקום שלך ומחפש מה קרוב…</p>}
           {sleepPick.status === 'error' && <p>{sleepPick.msg}</p>}
-          {sleepPick.status === 'ready' && <p>בחר את המקום, תכתוב מחיר, וזהו. 10 שניות.</p>}
+          {sleepPick.status === 'ready' && <p>{offlineNow ? '📵 בחר מקום שמור. הדיווח יישמר במכשיר עד שתחזור הרשת.' : 'בחר את המקום, תכתוב מחיר, וזהו. 10 שניות.'}</p>}
         </div>
         {sleepPick.status === 'locating' && <ul className="places">{[0, 1, 2].map(i => <li key={i} className="card skeleton row-skel" />)}</ul>}
         {sleepPick.status === 'ready' && <ul className="sleep-list">{sleepPick.places.map((p, i) => <li key={p.id}>
@@ -661,7 +702,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         {bootOn && <><div id="boot" suppressHydrationWarning dangerouslySetInnerHTML={{ __html: BOOT_HTML }} /><script dangerouslySetInnerHTML={{ __html: BOOT_JS }} /></>}
         {(picker || status === 'error') && <section className="card"><h2>לאן?</h2>{Picker}</section>}
         <button className="btn block" onClick={() => setOfflineOpen(!offlineOpen)}>🏔️ {offlineOpen ? 'סגור מסלולים שמורים' : 'מסלולים שמורים לאופליין'}</button>
-        {offlineOpen && <OfflineTreks loggedIn={loggedIn || (!online && !!offlineOwner)} owner={me?.user?.email ?? (!online ? offlineOwner : null)} searchesLeft={me?.searchesLeft ?? 0} onCreditChange={n => setMe(x => x ? { ...x, searchesLeft: n } : x)} />}
+        {offlineOpen && <OfflineTreks loggedIn={loggedIn || (offlineNow && !!offlineOwner)} owner={me?.user?.email ?? (offlineNow ? offlineOwner : null)} searchesLeft={me?.searchesLeft ?? 0} onCreditChange={n => setMe(x => x ? { ...x, searchesLeft: n } : x)} />}
         <h2 className="section-title">איך זה עובד</h2>
         <section className="steps">
           {[
@@ -686,7 +727,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     : <>
       <Header />
       <main className="wrap app">
-        {reporting ? <ReportForm place={reporting === 'manual' ? null : reporting} area={area?.name ?? ''} areaLat={area?.lat} areaLon={area?.lon} country={reportCountry} owner={me?.user?.email ?? (!online ? offlineOwner : null)} onDone={afterReport} onCancel={() => setReporting(null)} />
+        {reporting ? <ReportForm place={reporting === 'manual' ? null : reporting} area={area?.name ?? ''} areaLat={area?.lat} areaLon={area?.lon} country={reportCountry} owner={me?.user?.email ?? (offlineNow ? offlineOwner : null)} offline={offlineNow} onDone={afterReport} onCancel={() => setReporting(null)} />
 
         : open ? <section className="detail">
             <div className="detail-top">
@@ -699,13 +740,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             {(open.locality || open.country) && <p className="muted place-where">{KIND_ICON[open.kind] ?? '🏠'} {kindLabel(open.kind)}{open.locality ? ` ב-${open.locality}` : ''}{open.country ? ` ${flagOf(open.country)}` : ''}{open.distance != null ? ` · ${dist(open.distance)}` : ''}{open.reports ? ` · ${open.reports === 1 ? 'דיווח מחיר 1' : `${open.reports} דיווחי מחיר`}` : ''}</p>}
             {Number.isFinite(open.lat) && <div className="maps">
               {[
-                { name: 'Google Maps', domain: 'maps.google.com', href: `https://www.google.com/maps/dir/?api=1&destination=${open.lat},${open.lon}` },
-                { name: 'Apple Maps', domain: 'maps.apple.com', href: `https://maps.apple.com/?daddr=${open.lat},${open.lon}&q=${encodeURIComponent(open.name)}` },
-                { name: 'Mappy', domain: 'mappy.com', href: `https://fr.mappy.com/itineraire#/vers/${open.lat},${open.lon}/` },
+                { name: 'Google Maps', icon: '/icons/nav/google-maps.png', href: `https://www.google.com/maps/dir/?api=1&destination=${open.lat},${open.lon}` },
+                { name: 'Apple Maps', icon: '/icons/nav/apple-maps.png', href: `https://maps.apple.com/?daddr=${open.lat},${open.lon}&q=${encodeURIComponent(open.name)}` },
+                { name: 'Mappy', icon: '/icons/nav/mappy.jpg', href: `https://fr.mappy.com/itineraire#/vers/${open.lat},${open.lon}/` },
               ].map((m) => (
                 <a key={m.name} className="map-icon" href={m.href} target="_blank" rel="noopener" aria-label={`ניווט ב-${m.name}`} title={`ניווט ב-${m.name}`}>
-                  {/* Official app icons are loaded from the services' own favicons, not bundled in this MIT repo. */}
-                  <img src={`https://www.google.com/s2/favicons?domain=${m.domain}&sz=128`} alt={m.name} width={44} height={44} loading="lazy" referrerPolicy="no-referrer" />
+                  {/* Navigation app icons are stored with the app shell for offline use. */}
+                  <img src={m.icon} alt={m.name} width={44} height={44} loading="lazy" referrerPolicy="no-referrer" />
                 </a>
               ))}
             </div>}
@@ -774,13 +815,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             {gate ? <div className={`gate ${gate.ok ? 'ok' : ''} ${'wait' in gate ? 'wait' : ''}`}>{'wait' in gate ? '' : gate.ok ? '🔓 ' : '🎟️ '}{gate.t}</div> : <div className="gate gate-slot" aria-hidden="true">&nbsp;</div>}
             <button className="btn sleep block" onClick={sleepHere}>😴 אני ישן כאן עכשיו · דיווח ב-10 שניות</button>
             <button className="btn block" onClick={() => setOfflineOpen(!offlineOpen)}>🏔️ {offlineOpen ? 'סגור מסלולים שמורים' : 'מסלולים שמורים לאופליין'}</button>
-            {offlineOpen && <OfflineTreks loggedIn={loggedIn || (!online && !!offlineOwner)} owner={me?.user?.email ?? (!online ? offlineOwner : null)} searchesLeft={me?.searchesLeft ?? 0} onCreditChange={n => setMe(x => x ? { ...x, searchesLeft: n } : x)} />}
+            {offlineOpen && <OfflineTreks loggedIn={loggedIn || (offlineNow && !!offlineOwner)} owner={me?.user?.email ?? (offlineNow ? offlineOwner : null)} searchesLeft={me?.searchesLeft ?? 0} onCreditChange={n => setMe(x => x ? { ...x, searchesLeft: n } : x)} />}
             {picker && <div className="card">{Picker}</div>}
-            {area && <StayMap center={area} places={places} counts={counts} me={myPos} onSelect={openPlace} />}
+            {area && !offlineArea && <StayMap center={area} places={places} counts={counts} me={myPos} onSelect={openPlace} />}
             {message && <p className="muted">{message}</p>}
             {status === 'loading' && <ul className="places">{[0, 1, 2, 3].map(i => <li key={i} className="card skeleton row-skel" />)}</ul>}
-            {status === 'ready' && places.length > 0 && !knownCount && <div className="card cta empty-area-cta"><h2>עוד אין מחירים באזור הזה</h2><p>{places.length === 1 ? 'יש ברשימה מקום לינה אחד מהמפה' : `יש ברשימה ${places.length} מקומות לינה מהמפה`}, אבל עדיין אין דיווח מחיר ממטיילים כאן. אם ישנת באזור, הדיווח שלך יעזור לבאים אחריך.</p><button className="btn primary block big" onClick={() => loggedIn ? setReporting('manual') : (setLoginWhy('report'), setLoginPop(true))}>היה לי כאן מקום לינה · אדווח ראשון</button></div>}
-            {status === 'ready' && places.length === 0 && <div className="card cta empty-area-cta"><h2>עוד אין מקומות לינה ברשימה</h2><p>לא נמצאו כאן לודג׳ים מהמפה או דיווחים קיימים. ישנת באזור? אפשר להוסיף מקום ולדווח מחיר.</p><button className="btn primary block big" onClick={() => loggedIn ? setReporting('manual') : (setLoginWhy('report'), setLoginPop(true))}>הוסף מקום ודווח מחיר</button></div>}
+            {status === 'ready' && places.length > 0 && !knownCount && !offlineArea && <div className="card cta empty-area-cta"><h2>עוד אין מחירים באזור הזה</h2><p>{places.length === 1 ? 'יש ברשימה מקום לינה אחד מהמפה' : `יש ברשימה ${places.length} מקומות לינה מהמפה`}, אבל עדיין אין דיווח מחיר ממטיילים כאן. אם ישנת באזור, הדיווח שלך יעזור לבאים אחריך.</p><button className="btn primary block big" onClick={() => loggedIn || (offlineNow && !!offlineOwner) ? setReporting('manual') : (setLoginWhy('report'), setLoginPop(true))}>היה לי כאן מקום לינה · אדווח ראשון</button></div>}
+            {status === 'ready' && places.length === 0 && !offlineArea && <div className="card cta empty-area-cta"><h2>עוד אין מקומות לינה ברשימה</h2><p>לא נמצאו כאן לודג׳ים מהמפה או דיווחים קיימים. ישנת באזור? אפשר להוסיף מקום ולדווח מחיר.</p><button className="btn primary block big" onClick={() => loggedIn || (offlineNow && !!offlineOwner) ? setReporting('manual') : (setLoginWhy('report'), setLoginPop(true))}>הוסף מקום ודווח מחיר</button></div>}
             {status === 'ready' && places.length > 0 && <>
               <div className="seg filter">
                 <button className={!onlyKnown ? 'on' : ''} onClick={() => setOnlyKnown(false)}>הכל ({places.length})</button>
@@ -789,7 +830,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
               <div className="room-filters"><label>מיטות בחדר<select disabled={!filtersReady} value={bedsFilter ?? ''} onChange={e => setBedsFilter(e.target.value ? Number(e.target.value) : null)}><option value="">כל מספר</option>{Array.from({ length: 20 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}</select></label>{region && <label className="deal-filter"><input type="checkbox" disabled={!filtersReady} checked={dealFilter} onChange={e => setDealFilter(e.target.checked)} />הדיל הישראלי</label>}{!filtersReady && <span className="muted small">{pricesLoading ? 'טוען מסננים…' : 'אין דיווחים לסנן באזור הזה.'}</span>}</div>
               {onlyKnown && !knownCount && <p className="muted center">עוד אין דיווחי מחיר באזור הזה.</p>}
               {filterActive && !shown.length && <p className="muted center">אין דיווחים שמתאימים למסננים האלה.</p>}
-              <ul className="places">{shown.map((p, i) => { const n = filterActive ? (listFeatures[p.id] ?? []).filter(([beds, israeli_deal]) => matchesRoomDeal({ beds, israeli_deal }, bedsFilter, dealFilter)).length : counts[p.id] ?? 0; return <li key={p.id} style={{ ['--i' as any]: Math.min(i, 12) }}><button className="card place" onClick={() => openPlace(p)}>
+              <ul className="places">{shown.map((p, i) => { const n = filterActive ? (listFeatures[p.id] ?? []).filter(([beds, israeli_deal]) => matchesRoomDeal({ beds, israeli_deal }, bedsFilter, dealFilter)).length : (offlineArea ? listPrices[p.id]?.length : counts[p.id]) ?? 0; return <li key={p.id} style={{ ['--i' as any]: Math.min(i, 12) }}><button className="card place" onClick={() => offlineArea ? (setReporting(p), setOpen(null)) : openPlace(p)}>
                 <Thumb place={p} photo={photoFor(p)} />
                 <span className="place-body"><span className="name" dir="auto">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
                 {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{listMedian(p.id) === 'לינה חינם*' ? 'ארוחות בתשלום' : n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span>
@@ -798,10 +839,10 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                   : <span className="badge empty">עוד אין מחיר</span>}
               </button></li>; })}</ul>
             </>}
-            {status === 'ready' && (photos.area.length > 0 || Object.keys(photos.places).length > 0) && <p className="photo-credit center">📷 תמונות חופשיות מ-Wikimedia Commons. תמונה עם תגית ״אזור״ היא של הסביבה, לא של המקום. קרדיט מלא בדף המקום.</p>}
+            {status === 'ready' && !offlineArea && (photos.area.length > 0 || Object.keys(photos.places).length > 0) && <p className="photo-credit center">📷 תמונות חופשיות מ-Wikimedia Commons. תמונה עם תגית ״אזור״ היא של הסביבה, לא של המקום. קרדיט מלא בדף המקום.</p>}
             <div className="card cta">
               <h3>לא מופיע ברשימה?</h3>
-              <button className="btn block" onClick={() => loggedIn ? setReporting('manual') : (setLoginWhy('report'), setLoginPop(true))}>דווח מחיר ידנית</button>
+              <button className="btn block" onClick={() => loggedIn || (offlineNow && !!offlineOwner) ? setReporting('manual') : (setLoginWhy('report'), setLoginPop(true))}>דווח מחיר ידנית</button>
             </div>
           </>}
         {Footer}

@@ -5,6 +5,7 @@ import { deleteOfflinePack, listOfflinePacks, putOfflinePack, visibleOfflinePric
 import { findArea, type Area, type Place } from '@/lib/places';
 import { ReportForm } from '@/components/Extras';
 import { listPendingReports, syncPendingReports, removePendingReport, type PendingReport } from '@/lib/offlineReports';
+import { saveOfflineShell } from '@/lib/offlineShell';
 
 /** Only the deliberate Save button spends a credit; refresh reuses the same entitlement. */
 export default function OfflineTreks({ loggedIn, owner, searchesLeft, onCreditChange }: { loggedIn: boolean; owner: string | null; searchesLeft: number; onCreditChange: (n: number) => void }) {
@@ -50,7 +51,7 @@ export default function OfflineTreks({ loggedIn, owner, searchesLeft, onCreditCh
     key ??= `${route.key}:${crypto.randomUUID()}`;
     setPendingKey(key);
     try { localStorage.setItem(draft, key); } catch {}
-    try { const pack = await fetchPack(key, route, stops, trekDays); onCreditChange(pack.searchesLeft); const owned = { ...pack, owner: owner ?? undefined }; await putOfflinePack(owned); await reload(); setSelected(owned); setRoute(null); setPendingKey(null); try { localStorage.removeItem(draft); } catch {} }
+    try { const pack = await fetchPack(key, route, stops, trekDays); onCreditChange(pack.searchesLeft); const owned = { ...pack, owner: owner ?? undefined }; await putOfflinePack(owned); const shellReady = await saveOfflineShell(); if (!shellReady) setError('המסלול נשמר, אבל לא הצלחנו לשמור את קבצי האפליקציה לאופליין. פתח את האפליקציה שוב עם רשת לפני היציאה.'); await reload(); setSelected(owned); setRoute(null); setPendingKey(null); try { localStorage.removeItem(draft); } catch {} }
     catch (e) { setError(String(e instanceof Error ? e.message : 'השמירה נכשלה')); }
     finally { setBusy(false); }
   };
@@ -59,7 +60,7 @@ export default function OfflineTreks({ loggedIn, owner, searchesLeft, onCreditCh
     const r = OFFLINE_ROUTES.find(x => x.key === p.key.split(':')[0]);
     if (!r) return setError('לא ניתן לעדכן את המסלול הזה.');
     setBusy(true); setError('');
-    try { const updated = { ...await fetchPack(p.key, r, p.stops, p.trekDays), owner: owner ?? undefined }; await putOfflinePack(updated); setSelected(updated); await reload(); }
+    try { const updated = { ...await fetchPack(p.key, r, p.stops, p.trekDays), owner: owner ?? undefined }; await putOfflinePack(updated); if (!await saveOfflineShell()) setError('המסלול עודכן, אבל קבצי האפליקציה לא נשמרו לאופליין. פתח אותה שוב עם רשת.'); setSelected(updated); await reload(); }
     catch (e) { setError(e instanceof Error ? e.message : 'העדכון נכשל'); }
     finally { setBusy(false); }
   };
@@ -69,6 +70,7 @@ export default function OfflineTreks({ loggedIn, owner, searchesLeft, onCreditCh
     {error && <p className="note warn">{error}</p>}
     {reportMessage && <p className="note">{reportMessage}</p>}
     {!!pending.length && <div className="offline-pending"><h3>דיווחים שמורים במכשיר ({pending.length})</h3><p className="muted small">דיווחים ממתינים יעלו אוטומטית כשיש רשת וחשבון מחובר. אם נדרש תיקון, אפשר למחוק ולדווח שוב. מחיקה לא מבטלת דיווח שכבר הגיע לשרת.</p>{pending.map(p => <div className="offline-pending-row" key={p.clientReportId}><span>{String(p.body.placeName ?? 'דיווח')} · {p.state === 'needs_review' ? 'דורש בדיקה' : 'ממתין לשליחה'}</span><button className="chip" onClick={async () => { await removePendingReport(p.clientReportId); reloadPending(); }}>מחק</button></div>)}<button className="btn block" disabled={busy} onClick={sendPending}>נסה לשלוח דיווחים</button></div>}
+    {!online && !packs.length && <p className="note warn">אין מסלול שמור באפליקציה המותקנת הזאת. אם שמרת דרך Safari, יש לפתוח את האפליקציה המותקנת עם רשת ולשמור בה מחדש לפני ניתוק.</p>}
     {!!packs.length && <><h3>שמורים במכשיר</h3>{packs.map(p => <button key={p.key} className="btn block offline-row" onClick={() => { setSelected(p); setRoute(null); }}><b>{p.name}</b><span>{p.stops.length} עצירות · {p.stops.reduce((n, s) => n + s.lodges.length, 0)} לודג׳ים</span></button>)}</>}
     {reportPlace && owner && <ReportForm key={reportPlace.place?.id ?? `manual-${reportPlace.stop.name}`} place={reportPlace.place} area={reportPlace.stop.name} areaLat={reportPlace.stop.lat} areaLon={reportPlace.stop.lon} country="NP" owner={owner} onDone={msg => { setReportPlace(null); setReportMessage(msg); reloadPending(); }} onCancel={() => setReportPlace(null)} />}
     {selected && !reportPlace && <div className="offline-stops"><h3>{selected.name}</h3><p className="muted small">{online ? packIsCurrent(selected) ? '🟢 נשמר ב־24 השעות האחרונות' : '🟠 כדאי לרענן' : '📵 אופליין'} · עודכן במכשיר {new Date(selected.savedAt).toLocaleString('he-IL')} · {Date.now() >= selected.pricesExpireAt ? 'המחירים פגו והוסתרו' : `מחירים עד ${new Date(selected.pricesExpireAt).toLocaleDateString('he-IL')}`}</p>

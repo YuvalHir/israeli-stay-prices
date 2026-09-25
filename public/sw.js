@@ -5,11 +5,11 @@
 // - place lookups (Photon/OSM): network with a 4s timeout, then the last answer, so areas you opened work offline
 // - /api/* is never cached: prices and sign-in must be live.
 // - same-origin versioned code chunks are cached so the saved-route UI opens after an offline reload.
-const V = 'v4';
+const V = 'v5';
 const SHELL = `sp-shell-${V}`, STATIC = `sp-static-${V}`, MEDIA = `sp-media-${V}`, DATA = `sp-data-${V}`;
 const KEEP = [SHELL, STATIC, MEDIA, DATA];
 // Small on purpose: the first visit may be on 2G. Big icons are fetched by the OS only when installing.
-const PRECACHE = ['/', '/manifest.webmanifest', '/icons/v2/icon-96.webp', '/teahouse-480.webp'];
+const PRECACHE = ['/', '/manifest.webmanifest', '/icons/v2/icon-96.webp', '/teahouse-480.webp', '/icons/nav/google-maps.png', '/icons/nav/apple-maps.png', '/icons/nav/mappy.jpg'];
 const MEDIA_MAX = 300;
 
 self.addEventListener('install', (e) => {
@@ -64,4 +64,23 @@ self.addEventListener('fetch', (e) => {
   }
   if (url.hostname === 'photon.komoot.io') { e.respondWith(netFirst(req, DATA, 4000, 400).catch(() => fetch(req))); return; }
   if (url.hostname === 'tile.openstreetmap.org' || url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org') { e.respondWith(cacheFirst(req, MEDIA, MEDIA_MAX).catch(() => fetch(req))); }
+});
+
+// Save the visited app shell after the user explicitly saves a route. The
+// on-demand UI modules must be available when the standalone PWA is reopened.
+self.addEventListener('message', (e) => {
+  if (e.data?.type !== 'SAVE_OFFLINE_SHELL') return;
+  e.waitUntil((async () => {
+    try {
+      const c = await caches.open(SHELL);
+      for (const path of e.data.paths || []) {
+        const u = new URL(path, self.location.origin);
+        if (u.origin !== self.location.origin || !(u.pathname === '/' || u.pathname.startsWith('/_next/static/'))) continue;
+        const response = await fetch(u.href);
+        if (!response.ok) throw new Error('asset unavailable');
+        await c.put(u.href, response);
+      }
+      e.ports[0]?.postMessage({ ok: true });
+    } catch { e.ports[0]?.postMessage({ ok: false }); }
+  })());
 });

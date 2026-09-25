@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { OFFLINE_ROUTES } from '../lib/offlineRoutes';
 import { visibleOfflinePrices, packIsCurrent, type OfflinePack } from '../lib/offlinePack';
+import { offlineNearby } from '../lib/offlineNearby';
 assert.ok(OFFLINE_ROUTES.some(r => r.key === 'gokyo-two-passes'));
 for (const r of OFFLINE_ROUTES) {
   assert.ok(r.stops.length >= 2 && r.stops.length <= 30);
@@ -11,6 +12,15 @@ const p = { key: 'r', name: 'Trek', savedAt: 1000, pricesExpireAt: 2000, stops: 
 assert.equal(visibleOfflinePrices(p, 1500).length, 1);
 assert.equal(visibleOfflinePrices(p, 2000).length, 0);
 assert.equal(packIsCurrent(p, 1500), true);
+const locationPack = { ...p, owner: 'owner@example.com', stops: [{ name: 'Stop', lat: 27.717, lon: 85.324, lodges: [
+  { id: 'p', name: 'Lodge', kind: 'guest_house', lat: 27.718, lon: 85.324, reports: 1 },
+  { id: 'far', name: 'Far', kind: 'guest_house', lat: 27.77, lon: 85.324, reports: 1 },
+] }] };
+assert.equal(offlineNearby([locationPack], 'owner@example.com', 27.717, 85.324, 1500).length, 1);
+assert.equal(offlineNearby([locationPack], 'owner@example.com', 27.717, 85.324, 1500)[0].prices.length, 1);
+assert.equal(offlineNearby([locationPack], 'other@example.com', 27.717, 85.324, 1500).length, 0);
+assert.equal(offlineNearby([locationPack], null, 27.717, 85.324, 1500).length, 0);
+assert.equal(offlineNearby([locationPack], 'owner@example.com', 27.717, 85.324, 2000)[0].prices.length, 0);
 const result = execFileSync('python3', ['-c', `
 import sqlite3,pathlib,uuid
 c=sqlite3.connect(':memory:');c.execute('PRAGMA foreign_keys=ON')

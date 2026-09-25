@@ -10,7 +10,7 @@ import { SITE_URL } from '@/lib/placeUrl';
 import { trekDealRegion } from '@/lib/trekDeal';
 import { queueReport } from '@/lib/offlineReports';
 
-export function ReportForm({ place, area, areaLat, areaLon, country, owner, onDone, onCancel }: { place: Place | null; area: string; areaLat?: number; areaLon?: number; country: string | null; owner: string | null; onDone: (msg: string, share?: ShareInfo) => void; onCancel: () => void }) {
+export function ReportForm({ place, area, areaLat, areaLon, country, owner, offline = false, onDone, onCancel }: { place: Place | null; area: string; areaLat?: number; areaLon?: number; country: string | null; owner: string | null; offline?: boolean; onDone: (msg: string, share?: ShareInfo) => void; onCancel: () => void }) {
   const local = currencyFor(country);
   const options = Array.from(new Set([local, 'USD', 'ILS']));
   const [name, setName] = useState(place?.name ?? '');
@@ -33,7 +33,7 @@ export function ReportForm({ place, area, areaLat, areaLon, country, owner, onDo
     if (!beds) return setError('חסר מספר המיטות בחדר.');
     setBusy(true); setError('');
     const body = { clientReportId: crypto.randomUUID(), placeId: place?.id, placeName: name, placeKind: place?.kind, lat: place?.lat ?? areaLat, lon: place?.lon ?? areaLon, area, country, price: p, currency, room, beds, israeliDeal, nights, stayMonth: month, note };
-    if (!navigator.onLine) {
+    if (!navigator.onLine || offline) {
       if (!owner) { setBusy(false); setError('כדי לשמור דיווח אופליין צריך להתחבר כשיש רשת.'); return; }
       try { await queueReport(body, owner); setBusy(false); onDone('הדיווח נשמר רק במכשיר ויעלה אוטומטית כשיהיה אינטרנט. עדיין לא קיבלת חיפושים.'); }
       catch { setBusy(false); setError('לא הצלחתי לשמור במכשיר. בדוק מקום פנוי ונסה שוב.'); }
