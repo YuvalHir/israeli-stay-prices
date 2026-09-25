@@ -473,6 +473,8 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const knownCount = places.filter(p => counts[p.id]).length;
   const shown = onlyKnown ? places.filter(p => counts[p.id]) : places;
   const showLanding = !area && !reporting && !open;
+  // The landing photo was skipped for a shared area link (layout.tsx); allow it again once the list is up.
+  useEffect(() => { if (area) document.documentElement.classList.remove('at-link'); }, [area]);
   // Status-bar tint follows what sits under it: dark over the landing photo (and the onboarding over it), light elsewhere.
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]'); if (!meta) return;

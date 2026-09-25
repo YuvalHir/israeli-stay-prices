@@ -21,8 +21,10 @@ export const viewport: Viewport = { themeColor: '#f6f3ee', width: 'device-width'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl">
+    <html lang="he" dir="rtl" suppressHydrationWarning>
       <head>
+        {/* Shared area links open straight into the list, so skip downloading the landing photo. */}
+        <script dangerouslySetInnerHTML={{ __html: "if(/[?&]at=/.test(location.search))document.documentElement.classList.add('at-link')" }} />
         {/* Heebo, self-hosted, Hebrew only. Latin letters and digits use the phone font. */}
         <link rel="preload" href="/fonts/heebo-hebrew.woff2" as="font" type="font/woff2" crossOrigin="" />
         <link rel="preconnect" href="https://tile.openstreetmap.org" />
