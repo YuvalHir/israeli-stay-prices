@@ -302,13 +302,42 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const [loginWhy, setLoginWhy] = useState<'views' | 'report'>('views');
   const [sleepPick, setSleepPick] = useState<{ status: 'locating' | 'ready' | 'error'; places: Place[]; msg?: string } | null>(null);
 
+  // Autocomplete: debounce, cancel the previous request, and drop any answer that isn't for the current text.
+  const sugSeq = useRef(0);
+  const [sugFor, setSugFor] = useState('');
   useEffect(() => {
     const q = search.trim();
-    if (q.length < 2) { setSugs([]); return; }
+    const id = ++sugSeq.current;
+    if (q.length < 2) { setSugs([]); setSugFor(''); return; }
     const ctl = new AbortController();
-    const t = setTimeout(() => { suggestPlaces(q, area ?? myPos, ctl.signal).then(r => { if (!ctl.signal.aborted) setSugs(r); }); }, 250);
+    const t = setTimeout(() => {
+      suggestPlaces(q, area ?? myPos, ctl.signal).then(r => { if (!ctl.signal.aborted && id === sugSeq.current) { setSugs(r); setSugFor(q); } });
+    }, 280);
     return () => { clearTimeout(t); ctl.abort(); };
   }, [search]);
+  const sugFresh = sugFor !== '' && sugFor === search.trim();
+  const sugBusy = search.trim().length >= 2 && !sugFresh;
+  const liveSugs = sugFresh ? sugs : [];
+
+  // A cached old copy of the app (weak signal, service worker) notices a new deploy and reloads once.
+  useEffect(() => {
+    const mine = process.env.NEXT_PUBLIC_BUILD;
+    const check = async () => {
+      try {
+        const r = await fetch('/api/version', { cache: 'no-store' }); if (!r.ok) return;
+        const { v } = await r.json();
+        if (!v || !mine || v === mine || sessionStorage.getItem('sp_reloaded') === v) return;
+        sessionStorage.setItem('sp_reloaded', v);
+        try { for (const k of await caches.keys()) if (k.startsWith('sp-shell')) await caches.delete(k); } catch { /* no caches */ }
+        await navigator.serviceWorker?.getRegistration().then(r => r?.update()).catch(() => {});
+        location.reload();
+      } catch { /* offline */ }
+    };
+    check();
+    const onVis = () => { if (document.visibilityState === 'visible' && !document.activeElement?.matches('input,textarea')) check(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
   const pickSug = async (sg: Suggestion) => {
     setSugOpen(false); setSearch(''); setSugs([]);
     if (sg.type === 'stay' && sg.placeId) {
@@ -581,9 +610,11 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     <div className="searchrow">
       <div className="ac">
         <input value={search} onChange={e => { setSearch(e.target.value); setSugOpen(true); }} onFocus={() => setSugOpen(true)} onBlur={() => setTimeout(() => setSugOpen(false), 150)}
-          onKeyDown={e => { if (e.key === 'Enter') { if (sugs[0]) pickSug(sugs[0]); else doSearch(); } }} placeholder="עיר, שכונה או שם מלון" aria-label="חיפוש עיר, אזור או מקום לינה" enterKeyHint="search" autoComplete="off" role="combobox" aria-expanded={sugOpen && sugs.length > 0} />
-        {sugOpen && sugs.length > 0 && <ul className="ac-list" role="listbox">{sugs.map((sg, i) => <Fragment key={i}>
-          {(i === 0 || sugs[i - 1].type !== sg.type) && <li className="ac-head" aria-hidden="true">{sg.type === 'stay' ? 'מקומות לינה' : 'ערים ואזורים'}</li>}
+          onKeyDown={e => { if (e.key === 'Enter') { if (liveSugs[0]) pickSug(liveSugs[0]); else doSearch(); } }} placeholder="עיר, שכונה או שם מלון" aria-label="חיפוש עיר, אזור או מקום לינה" enterKeyHint="search" autoComplete="off" role="combobox" aria-expanded={sugOpen && liveSugs.length > 0} aria-busy={sugBusy} />
+        {sugBusy && <span className="ac-spin" aria-hidden="true" />}
+        {sugOpen && sugBusy && <ul className="ac-list ac-wait" aria-hidden="true">{[0, 1, 2].map(i => <li key={i} className="ac-shimmer"><span /><span /></li>)}</ul>}
+        {sugOpen && liveSugs.length > 0 && <ul className="ac-list" role="listbox">{liveSugs.map((sg, i) => <Fragment key={i}>
+          {(i === 0 || liveSugs[i - 1].type !== sg.type) && <li className="ac-head" aria-hidden="true">{sg.type === 'stay' ? 'מקומות לינה' : 'ערים ואזורים'}</li>}
           <li role="option" aria-selected={false}>
           <button onMouseDown={e => e.preventDefault()} onClick={() => pickSug(sg)}>
             <span className={`ac-icon ${sg.type === 'stay' ? 'stay' : ''}`}>{sg.type === 'stay' ? (KIND_ICON[sg.kind ?? ''] ?? '🏨') : '📍'}</span>
@@ -591,7 +622,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             <span className="ac-flag">{flagOf(sg.country)}</span></button>
         </li></Fragment>)}</ul>}
       </div>
-      <button className="btn primary" onClick={() => sugs[0] ? pickSug(sugs[0]) : doSearch()}>חפש</button>
+      <button className="btn primary" onClick={() => liveSugs[0] ? pickSug(liveSugs[0]) : doSearch()}>חפש</button>
     </div>
     <div className="chips">{QUICK_AREAS.map(a => <button key={a.name} className="chip" onClick={() => loadArea(a)}>{flagOf(a.country)} {a.name}</button>)}</div>
   </div>;
