@@ -472,3 +472,4 @@ button.adm-pill { cursor: pointer; }
 .ac-text { flex: 1; min-width: 0; }
 .ac-text b, .ac-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ac-list .ac-flag { flex: none; font-size: 18px; }
+.searchrow .ac-list { inset-inline-end: calc(-1 * var(--search-btn, 82px)); }
