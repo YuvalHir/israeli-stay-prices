@@ -328,11 +328,17 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     // Hand-off from the pre-React search box: finish its pick, or move its text into the real picker.
     const W = window as any; W.__hyd = true;
     const bootEl = document.getElementById('boot'), bootIn = bootEl?.querySelector('input');
-    const bootPick = W.__boot?.pick as Suggestion | undefined, bootOpen = !!bootEl && !(bootEl.querySelector('.boot-search') as HTMLElement | null)?.hidden;
-    const endBoot = () => { W.__bootGone = true; setBootOn(false); };
+    const bootPick = (W.__bootEarlyPick ?? W.__boot?.pick) as Suggestion | undefined, bootOpen = !!bootEl && !(bootEl.querySelector('.boot-search') as HTMLElement | null)?.hidden;
+    const endBoot = () => { W.__bootGone = true; W.__bootEarlyPick = null; setBootOn(false); };
     W.__bootPick = (sg: Suggestion) => { endBoot(); window.scrollTo({ top: 0 }); try { localStorage.setItem('sp_onboarded', '1'); } catch {} pickSug(sg); };
     W.__bootBlur = (v: string) => { endBoot(); setPicker(true); if (v.trim()) { setSearch(v); setSugOpen(true); } };
-    if (bootPick) W.__bootPick(bootPick);
+    if (bootPick) {
+      // The early list can be tapped before hydration. Its full place details may need
+      // a fresh area request; keep the stored pick instead of replacing it with /?at.
+      if (bootPick.type === 'stay' && bootPick.placeId) history.replaceState(null, '', '/');
+      W.__bootEarlyPick = null;
+      W.__bootPick(bootPick);
+    }
     else if (bootOpen && document.activeElement !== bootIn) W.__bootBlur(bootIn?.value ?? '');
     else if (!bootOpen) endBoot();
     if (bootPick || bootOpen) { /* the user is already searching */ }

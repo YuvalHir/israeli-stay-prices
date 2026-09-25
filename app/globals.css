@@ -537,7 +537,8 @@ button.adm-pill { cursor: pointer; }
 .returning-h { margin: 0 0 8px; font-weight: 700; font-size: 14px; }
 .boot-wait { margin: 10px 2px 0; color: var(--ink2); font-size: 14px; }
 .boot-list { position: fixed; inset: 0; z-index: 900; background: var(--page); overflow: auto; }
-.boot-list .place { cursor: default; }
+.boot-list .place { cursor: pointer; }
+.boot-list .place:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .gate-slot { visibility: hidden; }
 .at-link .hero-photo { background-image: none; }
 
