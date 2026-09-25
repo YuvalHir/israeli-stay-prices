@@ -454,3 +454,4 @@ button.adm-pill { cursor: pointer; }
 .sheet::-webkit-scrollbar { display: none; }
 .sleep-list { max-height: min(46vh, calc(100dvh - env(safe-area-inset-top) - 330px)); min-height: 140px; }
 .hero { padding-top: 0; }
+.sheet { overscroll-behavior-y: none; }

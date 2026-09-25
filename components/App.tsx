@@ -202,7 +202,9 @@ function Sheet({ onClose, className = '', children }: { onClose?: () => void; cl
     const move = (e: TouchEvent) => {
       if (!active) return;
       const d = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
-      if (!dragging) { if (d > 8 && d > dx) { dragging = true; el.style.transition = 'none'; } else if (Math.abs(d) > 8 || dx > 8) { active = false; return; } else return; }
+      // Claim downward moves from the very first frame: once iOS starts its own scroll/bounce, later preventDefault calls are ignored.
+      if (!dragging && d > 0 && d >= dx && e.cancelable) e.preventDefault();
+      if (!dragging) { if (d > 8 && d > dx) { dragging = true; el.style.transition = 'none'; } else if (d < -4 || dx > 8) { active = false; return; } else return; }
       dy = Math.max(0, d); if (e.cancelable) e.preventDefault();
       el.style.transform = `translateY(${dy}px)`;
     };
@@ -608,8 +610,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         <button className="btn ghost block" onClick={dismiss}>ביטול</button>
       </>}</Sheet>}
 
-    {onboarding && <div className="sheet-backdrop" role="dialog" aria-modal="true">
-      <div className="sheet">
+    {onboarding && <Sheet onClose={finishOnboarding}>{dismiss => <>
         {[
           { i: '👋', t: 'ברוך הבא', b: 'כאן מטיילים ישראלים משתפים כמה באמת שילמו ללילה, בכל מדינה: מלונות, הוסטלים, גסטהאוסים ולודג׳ים. ככה יודעים על מה להתמקח.' },
           { i: '🗺️', t: 'איך זה עובד', b: 'האפליקציה מוצאת את מקומות הלינה סביבך על המפה. 3 מקומות ראשונים פתוחים לצפייה, אפילו בלי להתחבר.' },
@@ -618,10 +619,9 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         <div className="dots">{[0, 1, 2].map(i => <span key={i} className={i === step ? 'on' : ''} />)}</div>
         {step < 2 ? <button className="btn primary block" onClick={() => setStep(step + 1)}>הבא</button>
           : <button className="btn primary block" onClick={finishOnboarding}>📍 מצא מחירים לידי</button>}
-        <button className="btn ghost block" onClick={finishOnboarding}>דלג</button>
+        <button className="btn ghost block" onClick={dismiss}>דלג</button>
         {step === 2 && <p className="muted small center">נבקש גישה למיקום כדי להראות מה קרוב אליך. המיקום לא נשמר.</p>}
-      </div>
-    </div>}
+      </>}</Sheet>}
 
     {showLanding ? <div className="landing">
       <div className="hero" style={{ backgroundImage: 'linear-gradient(180deg, rgba(14,12,10,.35) 0%, rgba(14,12,10,.05) 30%, rgba(14,12,10,.85) 100%), url(/teahouse.jpg)' }}>
