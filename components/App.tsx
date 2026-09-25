@@ -132,6 +132,8 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const [offlineOwner, setOfflineOwner] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
   const [offlineArea, setOfflineArea] = useState(false);
+  const [offlinePriceExpiry, setOfflinePriceExpiry] = useState<Record<string, number>>({});
+  const [expiryTick, setExpiryTick] = useState(0);
   const [networkUnavailable, setNetworkUnavailable] = useState(false);
   const offlineNow = !online || networkUnavailable;
   useEffect(() => { const update = () => { setOnline(navigator.onLine); if (navigator.onLine) setNetworkUnavailable(false); setOfflineOwner(localStorage.getItem('sp_offline_owner')); }; update(); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); }; }, []);
@@ -290,7 +292,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     track('area_view');
     if (GENERIC.includes(a.name)) localityAt(a.lat, a.lon).then(l => { if (l) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, label: l.name, country: cur.country ?? l.country } : cur); });
     if (!a.country) countryAt(a.lat, a.lon).then(c => { if (c) setArea(cur => cur && cur.lat === a.lat && cur.lon === a.lon ? { ...cur, country: c } : cur); });
-    setOfflineArea(false); setListPrices({}); setListFeatures({}); setBedsFilter(null); setDealFilter(false); setSearchId(null); setPricesLoading(true); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
+    setOfflineArea(false); setOfflinePriceExpiry({}); setListPrices({}); setListFeatures({}); setBedsFilter(null); setDealFilter(false); setSearchId(null); setPricesLoading(true); areaRef.current = a; setArea(a); if (!keepOpen) { setOpen(null); setReporting(null); } setStatus('loading'); setMessage(''); setPicker(false); setOnlyKnown(false);
     try {
       // One edge request for places + counts; the direct OSM lookup is only the fallback.
       // The pre-React script may already have asked for this exact area (shared link or early pick).
@@ -331,6 +333,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     setBedsFilter(null); setDealFilter(false); setOnlyKnown(false); setPicker(false);
     setPlaces(nearby.map(x => x.place));
     setCounts(Object.fromEntries(nearby.map(x => [x.place.id, x.reports])));
+    setOfflinePriceExpiry(Object.fromEntries(nearby.map(x => [x.place.id, x.expiresAt])));
     setListPrices(Object.fromEntries(nearby.map(x => [x.place.id, x.prices.map(p => [p.price, p.currency, p.beds, p.israeliDeal] as [number, string, number | null, number])])));
     setListFeatures(Object.fromEntries(nearby.map(x => [x.place.id, x.prices.map(p => [p.beds, p.israeliDeal] as [number | null, number])])));
     setStatus('ready');
@@ -346,6 +349,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
         const a = areaRef.current;
         if (!a || !owner) return;
         const entries = offlineNearby(packs, owner, a.lat, a.lon);
+        setOfflinePriceExpiry(Object.fromEntries(entries.map(x => [x.place.id, x.expiresAt])));
         setListPrices(Object.fromEntries(entries.map(x => [x.place.id, x.prices.map(p => [p.price, p.currency, p.beds, p.israeliDeal] as [number, string, number | null, number])])));
         setListFeatures(Object.fromEntries(entries.map(x => [x.place.id, x.prices.map(p => [p.beds, p.israeliDeal] as [number | null, number])])));
       }).catch(() => { setListPrices({}); setListFeatures({}); });
@@ -354,6 +358,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     document.addEventListener('visibilitychange', expire);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', expire); };
   }, [offlineArea]);
+  useEffect(() => {
+    if (!offlineArea) return;
+    const next = Math.min(...Object.values(offlinePriceExpiry).filter(t => t > Date.now()));
+    if (!Number.isFinite(next)) return;
+    const t = setTimeout(() => setExpiryTick(n => n + 1), Math.max(0, next - Date.now() + 1));
+    return () => clearTimeout(t);
+  }, [offlineArea, offlinePriceExpiry, expiryTick]);
   const networkReady = async () => {
     if (!navigator.onLine) return false;
     try { const r = await fetch('/api/auth/me', { cache: 'no-store', signal: AbortSignal.timeout(2500) }); return r.ok; }
@@ -569,7 +580,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     {localCur !== 'ILS' && <option value="ILS">🇮🇱 ₪ ILS</option>}
   </select>;
   const listMedian = (id: string): string | null => {
-    const ps = (listPrices[id] ?? []).filter(([, , beds, deal]) => matchesRoomDeal({ beds, israeli_deal: deal }, bedsFilter, dealFilter));
+    const ps = (offlineArea && (offlinePriceExpiry[id] ?? 0) <= Date.now() ? [] : listPrices[id] ?? []).filter(([, , beds, deal]) => matchesRoomDeal({ beds, israeli_deal: deal }, bedsFilter, dealFilter));
     if (!ps.length) return null;
     if (ps.every(([, , , deal]) => deal === 1)) return 'לינה חינם*';
     const paid = ps.filter(([, , , deal]) => deal !== 1);
@@ -583,8 +594,8 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
   const matchesPlace = (id: string) => !filterActive || (listFeatures[id] ?? []).some(([beds, israeli_deal]) => matchesRoomDeal({ beds, israeli_deal }, bedsFilter, dealFilter));
   const reportCountry = (reporting && reporting !== 'manual' ? reporting.country : null) ?? open?.country ?? area?.country ?? ipCountry;
   const loggedIn = !!me?.user;
-  const knownCount = places.filter(p => counts[p.id] || (offlineArea && listPrices[p.id]?.length)).length;
-  const shown = places.filter(p => (!onlyKnown || counts[p.id] || (offlineArea && listPrices[p.id]?.length)) && matchesPlace(p.id));
+  const knownCount = places.filter(p => offlineArea ? (offlinePriceExpiry[p.id] > Date.now() && listPrices[p.id]?.length) : counts[p.id]).length;
+  const shown = places.filter(p => (!onlyKnown || (offlineArea ? (offlinePriceExpiry[p.id] > Date.now() && listPrices[p.id]?.length) : counts[p.id])) && matchesPlace(p.id));
   const showLanding = !area && !reporting && !open;
   // The landing photo was skipped for a shared area link (layout.tsx); allow it again once the list is up.
   useEffect(() => { if (area) document.documentElement.classList.remove('at-link'); }, [area]);
@@ -870,7 +881,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
               <div className="room-filters"><label>מיטות בחדר<select disabled={!filtersReady} value={bedsFilter ?? ''} onChange={e => setBedsFilter(e.target.value ? Number(e.target.value) : null)}><option value="">כל מספר</option>{Array.from({ length: 20 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}</select></label>{region && <label className="deal-filter"><input type="checkbox" disabled={!filtersReady} checked={dealFilter} onChange={e => setDealFilter(e.target.checked)} />הדיל הישראלי</label>}{!filtersReady && <span className="muted small">{pricesLoading ? 'טוען מסננים…' : 'אין דיווחים לסנן באזור הזה.'}</span>}</div>
               {onlyKnown && !knownCount && <p className="muted center">עוד אין דיווחי מחיר באזור הזה.</p>}
               {filterActive && !shown.length && <p className="muted center">אין דיווחים שמתאימים למסננים האלה.</p>}
-              <ul className="places">{shown.map((p, i) => { const n = filterActive ? (listFeatures[p.id] ?? []).filter(([beds, israeli_deal]) => matchesRoomDeal({ beds, israeli_deal }, bedsFilter, dealFilter)).length : (offlineArea ? listPrices[p.id]?.length : counts[p.id]) ?? 0; return <li key={p.id} style={{ ['--i' as any]: Math.min(i, 12) }}><button className="card place" onClick={() => offlineArea ? (setReporting(p), setOpen(null)) : openPlace(p)}>
+              <ul className="places">{shown.map((p, i) => { const n = offlineArea && (offlinePriceExpiry[p.id] ?? 0) <= Date.now() ? 0 : filterActive ? (listFeatures[p.id] ?? []).filter(([beds, israeli_deal]) => matchesRoomDeal({ beds, israeli_deal }, bedsFilter, dealFilter)).length : (offlineArea ? listPrices[p.id]?.length : counts[p.id]) ?? 0; return <li key={p.id} style={{ ['--i' as any]: Math.min(i, 12) }}><button className="card place" onClick={() => offlineArea ? (setReporting(p), setOpen(null)) : openPlace(p)}>
                 <Thumb place={p} photo={photoFor(p)} />
                 <span className="place-body"><span className="name" dir="auto">{p.name}</span><span className="muted small">{kindLabel(p.kind)} · {dist(p.distance)}</span></span>
                 {n && listMedian(p.id) ? <span className="badge known price"><b>{listMedian(p.id)}</b><small>{listMedian(p.id) === 'לינה חינם*' ? 'ארוחות בתשלום' : n === 1 ? 'דיווח 1' : `חציון · ${n}`}</small></span>

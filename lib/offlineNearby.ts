@@ -8,7 +8,7 @@ export function offlineNearby(packs: OfflinePack[], owner: string | null, lat: n
     const h = Math.sin(a / 2) ** 2 + Math.cos(lat * r) * Math.cos(p.lat * r) * Math.sin(b / 2) ** 2;
     return 12742 * Math.asin(Math.min(1, Math.sqrt(h)));
   };
-  const nearby = new Map<string, { place: Place; prices: OfflinePack['prices']; reports: number }>();
+  const nearby = new Map<string, { place: Place; prices: OfflinePack['prices']; reports: number; expiresAt: number }>();
   if (!owner) return [];
   for (const pack of packs) {
     if (pack.owner !== owner || !Number.isFinite(pack.savedAt) || pack.savedAt > now || !Number.isFinite(pack.pricesExpireAt)) continue;
@@ -20,7 +20,7 @@ export function offlineNearby(packs: OfflinePack[], owner: string | null, lat: n
       const old = nearby.get(lodge.id);
       if (!old || ownPrices.length > old.prices.length) nearby.set(lodge.id, {
         place: { id: lodge.id, name: lodge.name, kind: lodge.kind, lat: lodge.lat, lon: lodge.lon, country: lodge.country ?? 'NP', distance: d },
-        prices: ownPrices, reports: lodge.reports,
+        prices: ownPrices, reports: lodge.reports, expiresAt: pack.pricesExpireAt,
       });
     }
   }
