@@ -222,6 +222,11 @@ function AccountSheet({ me, onClose, onLogout, say }: { me: { name?: string | nu
   </>}</Sheet>;
 }
 
+/** Why we ask for Google sign-in. Shown before every sign-in. */
+function LoginNote() {
+  return <div className="login-note"><span aria-hidden="true">🔒</span><p><b>למה להתחבר?</b> כדי למנוע דיווחים כפולים ולא אמינים.</p></div>;
+}
+
 function Sheet({ onClose, className = '', children }: { onClose?: () => void; className?: string; children: (dismiss: () => void) => React.ReactNode }) {
   const [closing, setClosing] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -338,10 +343,11 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     installEvtRef.current = null; setInstallEvt(null);
     if (r?.outcome === 'accepted') { track('install'); writeA2hs({ ...readA2hs(), installed: true }); setInstalled(true); } else closeA2hs();
   };
-  const [loginWhy, setLoginWhy] = useState<'views' | 'report' | 'invite'>('views');
+  const [loginWhy, setLoginWhy] = useState<'views' | 'report' | 'invite' | 'plain'>('views');
   useEffect(() => { if (reporting) track('report_open'); }, [!!reporting]);
   useEffect(() => { if (loginPop) track('login_open'); }, [loginPop]);
   const [acct, setAcct] = useState(false);
+  const [inviteFrom, setInviteFrom] = useState<string | null>(null);
   const [sleepPick, setSleepPick] = useState<{ status: 'locating' | 'ready' | 'error'; places: Place[]; msg?: string } | null>(null);
 
   // Autocomplete: debounce, cancel the previous request, and drop any answer that isn't for the current text.
@@ -476,7 +482,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     if (lp === 'failed') say('ההתחברות עם Google לא הצליחה. נסה שוב.');
     if (lp === 'invite_required') say('ההרשמה כרגע בהזמנה בלבד. בקש קישור אישי מחבר שכבר בפנים 🎟️');
     const inv = new URLSearchParams(location.search).get('invite'), from = new URLSearchParams(location.search).get('from');
-    if (inv === 'ok') { say(`🎟️ ${from ? `${from} הזמין אותך!` : 'קיבלת הזמנה!'} התחבר עם Google כדי להצטרף`); setLoginWhy('invite'); setLoginPop(true); }
+    if (inv === 'ok') { setInviteFrom(from ?? ''); try { localStorage.setItem('sp_onboarded', '1'); } catch {} }
     if (inv === 'bad') say('קישור ההזמנה כבר נוצל או בוטל. בקש קישור חדש ממי ששלח לך.');
     if (lp || inv) history.replaceState(null, '', '/');
     let seen = false; try { seen = localStorage.getItem('sp_onboarded') === '1'; } catch {}
@@ -486,6 +492,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       if (Number.isFinite(initialPlace.lat)) loadArea({ name: initialPlace.locality ?? initialPlace.name, lat: initialPlace.lat, lon: initialPlace.lon, country: initialPlace.country }, true);
     }
     else if (at && at.length === 2 && at.every(Number.isFinite)) { history.replaceState(null, '', '/'); if (!seen) { try { localStorage.setItem('sp_onboarded', '1'); } catch {} } loadArea({ name: 'האזור ששותף', lat: at[0], lon: at[1] }); }
+    else if (inv === 'ok') { /* the invite welcome comes first; location after it closes */ }
     else if (!seen) setOnboarding(true); else locate(true);
     return () => { window.removeEventListener('beforeinstallprompt', h); window.removeEventListener('appinstalled', onInstalled); if (a2hsTimer) clearTimeout(a2hsTimer); };
   }, []);
@@ -653,7 +660,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
       {me?.isAdmin && <a className="chip" href="/admin">אדמין</a>}
       {loggedIn ? <button className="avatar" onClick={() => setAcct(true)} title={me?.user?.email} aria-label="החשבון שלי והזמנות">{(me?.user?.name ?? me?.user?.email ?? '?').trim()[0]}</button>
         : !me ? (meHint?.n ? <span className="avatar pending" aria-hidden="true">{meHint.n}</span> : <span className="chip ghost-slot" aria-hidden="true" />)
-        : <a className="chip strong" href="/api/auth/google">התחברות</a>}
+        : <button className="chip strong" onClick={() => { setLoginWhy('plain'); setLoginPop(true); }}>התחברות</button>}
     </nav>
   </header>;
 
@@ -691,15 +698,16 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     {toast && <div key={toast} className={`toast${toastOut ? ' out' : ''}`} role="status" onClick={() => hideToast()}>{toast}</div>}
 
     {loginPop && <Sheet onClose={() => setLoginPop(false)}>{dismiss => <>
-        <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>{loginWhy === 'invite' ? 'הוזמנת! נשאר רק להתחבר' : loginWhy === 'report' ? 'רק להתחבר, וממשיכים' : 'נגמרו 3 הצפיות החינמיות'}</h2>
-        <p>{loginWhy === 'report' ? 'הדיווח אנונימי: לא מוצגים שם או מייל. ההתחברות רק מונעת דיווחים כפולים.' : 'התחבר כדי להמשיך.'} אחרי ההתחברות, כל דיווח על מחיר ששילמת, או 👍 על דיווח של מישהו אחר, פותח לך 5 חיפושים עם מחירים.</p></div>
+        <div className="sheet-step"><div className="sheet-icon">🔑</div><h2>{loginWhy === 'plain' ? 'התחברות' : loginWhy === 'invite' ? 'הוזמנת! נשאר רק להתחבר' : loginWhy === 'report' ? 'רק להתחבר, וממשיכים' : 'נגמרו 3 הצפיות החינמיות'}</h2>
+        <p>{loginWhy === 'report' ? 'הדיווח מוצג בלי שם ובלי מייל.' : 'התחבר כדי להמשיך.'} אחרי ההתחברות, כל דיווח על מחיר ששילמת, או 👍 על דיווח של מישהו אחר, פותח לך 5 חיפושים עם מחירים.</p></div>
+        <LoginNote />
         <a className="btn primary block" href="/api/auth/google">התחבר עם Google</a>
         <button className="btn ghost block" onClick={dismiss}>אחר כך</button>
       </>}</Sheet>}
 
     {acct && me?.user && <AccountSheet me={me.user} onClose={() => setAcct(false)} onLogout={logout} say={say} />}
     {shareInfo && <ShareSheet info={shareInfo} onClose={() => { setShareInfo(null); setTimeout(() => offerInstall(), 600); }} />}
-    {a2hs && !shareInfo && !onboarding && !loginPop && !sleepPick && <InstallSheet ios={a2hs === 'ios'} onInstall={doInstall} onClose={closeA2hs} />}
+    {a2hs && !shareInfo && !onboarding && inviteFrom === null && !loginPop && !sleepPick && <InstallSheet ios={a2hs === 'ios'} onInstall={doInstall} onClose={closeA2hs} />}
 
     {sleepPick && <Sheet onClose={() => setSleepPick(null)}>{dismiss => <>
         <div className="sheet-step"><div className="sheet-icon">😴</div><h2>איפה אתה ישן?</h2>
@@ -716,6 +724,21 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
           </button></li>)}</ul>}
         {sleepPick.status !== 'locating' && <button className="btn block" onClick={() => { setSleepPick(null); setOpen(null); setReporting('manual'); }}>המקום שלי לא ברשימה</button>}
         <button className="btn ghost block" onClick={dismiss}>ביטול</button>
+      </>}</Sheet>}
+
+    {inviteFrom !== null && <Sheet onClose={() => { setInviteFrom(null); locate(true); }} className="invite-sheet">{dismiss => <>
+        <div className="invite-hero"><div className="invite-ticket" aria-hidden="true">🎟️</div>
+          <p className="invite-kicker">הזמנה אישית</p>
+          <h2>{inviteFrom ? <><bdi>{inviteFrom}</bdi> הזמין אותך</> : 'חבר הזמין אותך'}</h2>
+          <p className="muted">למחיר ללילה: כמה ישראלים באמת שילמו על לינה</p></div>
+        <ul className="invite-points">
+          <li><span>🏡</span><p><b>מחירים אמיתיים ממטיילים</b>מלונות, הוסטלים, גסטהאוסים ולודג׳ים, לפי מקום וחודש. ככה יודעים על מה להתמקח.</p></li>
+          <li><span>🤝</span><p><b>נותנים ומקבלים</b>מדווחים בעשר שניות כמה שילמתם, ובתמורה רואים את המחירים באזור.</p></li>
+          <li><span>🗺️</span><p><b>על המפה, סביבך</b>מוצאים מה קרוב, גם בקליטה חלשה.</p></li>
+        </ul>
+        <LoginNote />
+        <a className="btn primary block" href="/api/auth/google">הצטרף עם Google</a>
+        <button className="btn ghost block" onClick={dismiss}>קודם אסתכל</button>
       </>}</Sheet>}
 
     {onboarding && <Sheet onClose={finishOnboarding}>{dismiss => <>
@@ -800,7 +823,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             : openState.needLogin ? <div className="card cta">
                 <h3>🔒 נגמרו 3 הצפיות החינמיות</h3>
                 <p>התחבר עם Google, ואז כל דיווח מחיר (או 👍 על דיווח) פותח לך 5 חיפושים עם מחירים.</p>
-                <a className="btn primary block" href="/api/auth/google">התחבר עם Google</a>
+                <button className="btn primary block" onClick={() => { setLoginWhy('views'); setLoginPop(true); }}>התחבר עם Google</button>
               </div>
             : openState.locked ? <div className="card cta warn">
                 <h3>🔒 המחירים נעולים</h3>
@@ -874,7 +897,7 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
             {status === 'ready' && (photos.area.length > 0 || Object.keys(photos.places).length > 0) && <p className="photo-credit center">📷 תמונות חופשיות מ-Wikimedia Commons. תמונה עם תגית ״אזור״ היא של הסביבה, לא של המקום. קרדיט מלא בדף המקום.</p>}
             <div className="card cta">
               <h3>לא מופיע ברשימה?</h3>
-              <button className="btn block" onClick={() => loggedIn ? setReporting('manual') : (location.href = '/api/auth/google')}>דווח מחיר ידנית</button>
+              <button className="btn block" onClick={() => loggedIn ? setReporting('manual') : (setLoginWhy('report'), setLoginPop(true))}>דווח מחיר ידנית</button>
             </div>
           </>}
         {Footer}
