@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { reportAgeDays, freshnessWeight, freshnessLabel, weightedMedian } from '../lib/freshness';
+const now = Date.UTC(2026, 8, 25, 12);
+assert.equal(reportAgeDays('2026-09-25 08:00:00', '2026-09', now), 0);
+assert.equal(reportAgeDays('2026-09-24 08:00:00', '2026-09', now), 1);
+assert.ok((reportAgeDays('2026-09-25 08:00:00', '2025-01', now) ?? 0) > 500, 'old stay is not made fresh by late submission');
+assert.equal(reportAgeDays(null, null, now), null);
+assert.equal(freshnessLabel(0), 'דווח ב־24 השעות האחרונות');
+assert.equal(freshnessLabel(1), 'דווח לפני יום');
+assert.equal(freshnessWeight(90), .5);
+assert.equal(weightedMedian([{price:100, days:0},{price:300, days:365}]),100);
+assert.equal(weightedMedian([{price:100,days:0},{price:300,days:0}]),200);
+console.log('freshness tests passed');

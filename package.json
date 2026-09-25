@@ -10,7 +10,7 @@
     "db:migrate:local": "wrangler d1 migrations apply stay-prices --local",
     "db:migrate:remote": "wrangler d1 migrations apply stay-prices --remote",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
-    "test": "tsx tests/gate.test.ts && tsx tests/security.test.ts && tsx tests/trekDeal.test.ts && tsx tests/migration.test.ts && tsx tests/offline.test.ts"
+    "test": "tsx tests/gate.test.ts && tsx tests/security.test.ts && tsx tests/trekDeal.test.ts && tsx tests/migration.test.ts && tsx tests/offline.test.ts && tsx tests/freshness.test.ts"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.20.6",

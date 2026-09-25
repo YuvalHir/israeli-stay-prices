@@ -574,3 +574,5 @@ button.adm-pill { cursor: pointer; }
 .offline-stops li { padding: 8px 0; line-height: 1.6; overflow-wrap: anywhere; }
 .offline-stops li .chip { margin-inline-start: 8px; }
 .per-person-note { margin: 4px 0; }
+
+.report-age { text-align: start; line-height: 1.45; }

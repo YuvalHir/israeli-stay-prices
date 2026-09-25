@@ -10,6 +10,7 @@ import { placePath, SITE_URL } from '@/lib/placeUrl';
 import { BOOT_HTML, BOOT_JS } from '@/lib/boot';
 import { trekDealRegion, matchesRoomDeal } from '@/lib/trekDeal';
 import { clearOfflinePacks } from '@/lib/offlinePack';
+import { reportAgeDays, freshnessLabel, weightedMedian } from '@/lib/freshness';
 import { clearPendingReports, syncPendingReports } from '@/lib/offlineReports';
 
 export type { Photo };
@@ -463,13 +464,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
     const all = paid.map(r => conv(r.price, r.currency));
     if (all.every(v => v != null)) {
       const prices = all as number[];
-      return { cur: dispCur, med: median(prices), min: Math.min(...prices), max: Math.max(...prices), n: prices.length };
+      return { cur: dispCur, med: weightedMedian(paid.map((r, i) => ({ price: prices[i], days: reportAgeDays(r.created_at, r.stay_month) })))!, min: Math.min(...prices), max: Math.max(...prices), n: prices.length };
     }
     const byCur: Record<string, Report[]> = {};
     for (const r of paid) (byCur[r.currency] ??= []).push(r);
     const top = Object.values(byCur).sort((x, y) => y.length - x.length)[0];
     const prices = top.map(r => r.price);
-    return { cur: top[0].currency, med: median(prices), min: Math.min(...prices), max: Math.max(...prices), n: top.length };
+    return { cur: top[0].currency, med: weightedMedian(top.map(r => ({ price: r.price, days: reportAgeDays(r.created_at, r.stay_month) })))!, min: Math.min(...prices), max: Math.max(...prices), n: top.length };
   })();
   const DispSwitch = <select className="chip disp-select" value={disp} onChange={e => chooseDisp(e.target.value as Disp)} aria-label="מטבע להצגה">
     <option value="local">{flagOf(viewCountry)} {localCur}</option>
@@ -722,13 +723,13 @@ export default function App({ initialPlace = null }: { initialPlace?: InitialPla
                 {summary && new Set(filteredReports.map(r => r.room)).size === 1 && <div className="card price-card">
                   <span className="muted small">חציון ללילה · {filteredReports[0]?.room === 'dorm' ? 'למיטה בדורם' : 'לכל החדר*'}</span>
                   <div className="big-price"><PriceTag amount={summary.med} cur={summary.cur} roll /></div>
-                  <div className="muted small">{summary.cur !== dispCur ? 'אין שער המרה כרגע · ' : ''}{summary.n === 1 ? 'דיווח אחד' : `${summary.n} דיווחים`}{summary.n > 1 ? ` · טווח ${money(summary.min, summary.cur)} – ${money(summary.max, summary.cur)}` : ''}</div>
+                  <div className="muted small">החציון נותן יותר משקל למחירים משהייה ודיווח טריים · {summary.cur !== dispCur ? 'אין שער המרה כרגע · ' : ''}{summary.n === 1 ? 'דיווח אחד' : `${summary.n} דיווחים`}{summary.n > 1 ? ` · טווח ${money(summary.min, summary.cur)} – ${money(summary.max, summary.cur)}` : ''}</div>
                 </div>}
                 {summary && new Set(filteredReports.map(r => r.room)).size > 1 && <p className="muted small">יש כאן מחירים לחדרים ולמיטות בדורם. מוצגים הדיווחים בנפרד כדי לא לערבב ביניהם.</p>}
                 <ul className="reports">{filteredReports.map(r => { const c = conv(r.price, r.currency); const same = r.currency === dispCur || c == null; return <li key={r.id} className="card report">
                   <div className="report-top">
                     <b className="report-price">{r.israeli_deal ? 'לינה חינם*' : same ? <PriceTag amount={r.price} cur={r.currency} /> : <PriceTag amount={c!} cur={dispCur} approx />} <span className="muted small">{r.room === 'private' ? 'ללילה*' : 'למיטה ללילה'}</span></b>
-                    <span className="muted small">{monthLabel(r.stay_month)}</span>
+                    <span className="muted small report-age">שהייה: {monthLabel(r.stay_month)} · {freshnessLabel(r.created_at ? reportAgeDays(r.created_at, null) : null)}</span>
                   </div>
                   {r.room === 'private' && <p className="muted small per-person-note">* המחיר ללילה לכל החדר{r.beds && !r.israeli_deal ? ` · ${money(Math.round(r.price / r.beds * 100) / 100, r.currency)} לאדם בחדר מלא (${r.beds} מיטות)` : ''}</p>}
                   <div className="muted small">{ROOM_HE[r.room]}{r.beds ? ` · ${r.beds} מיטות בחדר` : ''}{r.israeli_deal ? ' · הדיל הישראלי' : ''}{r.nights > 1 ? ` · ${r.nights} לילות` : ''}{!same && !r.israeli_deal ? ` · שולם ${money(r.price, r.currency)}` : ''}</div>
