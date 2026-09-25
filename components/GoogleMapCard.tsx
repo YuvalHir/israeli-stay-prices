@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 // Keyless classic Google Maps embed (Yuval's choice, 25 Sep 2026): no API key, no billing.
+// The pin uses coordinates: name searches can land on the wrong place when Google doesn't know the lodge.
 
 const slowLink = () => {
   const c = (navigator as any).connection;
@@ -45,7 +46,7 @@ export default function GoogleMapCard({ name, lat, lon, locality }: { name: stri
   return <section className="card gmap" ref={box} aria-label="המקום בגוגל מפות">
     <div className="gmap-frame">
       {show && <iframe title={`${name} בגוגל מפות`} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen onLoad={() => setLoaded(true)}
-        src={`https://maps.google.com/maps?q=${encodeURIComponent(q)}&ll=${lat},${lon}&z=16&hl=iw&output=embed`} />}
+        src={`https://maps.google.com/maps?q=${lat},${lon}&z=17&hl=iw&output=embed`} />}
       {!loaded && <div className="gmap-ph">
         <span className="gmap-pin" aria-hidden="true">📍</span>
         <b>תמונות, ביקורות ומסלול</b>
